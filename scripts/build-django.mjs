@@ -116,3 +116,13 @@ writeFileSync(resolve(templateRoot, 'app.html'), template)
 console.log(`\nInstalled into server/${APP}/`)
 console.log(`  templates/${APP}/app.html   (${converted} asset URLs via {% static %})`)
 console.log(`  static/${APP}/assets/`)
+
+// Every build produces new content-hashed filenames. Under
+// ManifestStaticFilesStorage — which is what runs with DEBUG off — the old
+// manifest no longer knows about them, and {% static %} raises rather than
+// guessing, so the page 500s. The Dockerfile and Procfile already collect
+// after building; this is for anyone running production mode by hand.
+console.log(
+  '\nIf you are running with DEBUG=0, re-run collectstatic before serving:\n' +
+    '  cd server && python manage.py collectstatic --noinput',
+)

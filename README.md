@@ -1,5 +1,7 @@
 # Font Intelligence Studio
 
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/thenameissk/font-intelligence-studio)
+
 A browser-based font analysis and glyph editing tool. Import a font, find out
 what it is made of, change the actual vector geometry, and export a working
 font file. Everything runs locally — no backend, no upload, no API key.

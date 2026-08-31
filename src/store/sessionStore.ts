@@ -78,7 +78,10 @@ export const useSessionStore = create<SessionState>((set) => ({
     } catch {
       // Signing out that fails still means this browser should stop acting
       // signed in.
-      set({ session: { ...OFFLINE, available: true }, busy: false })
+      set({
+        session: { ...OFFLINE, available: true, mediaDurable: true },
+        busy: false,
+      })
     }
   },
 }))

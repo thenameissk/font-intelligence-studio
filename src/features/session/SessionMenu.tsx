@@ -1,5 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Cloud, HardDrive, Loader2, LogIn, LogOut, Users } from 'lucide-react'
+import {
+  AlertTriangle,
+  Cloud,
+  HardDrive,
+  Loader2,
+  LogIn,
+  LogOut,
+  Users,
+} from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { isSynced, useSessionStore } from '@/store/sessionStore'
 import { useLibraryStore } from '@/store/libraryStore'
@@ -47,6 +55,9 @@ export function SessionMenu() {
   if (!checked || !session.available) return null
 
   const synced = isSynced(session)
+  // Signed in, but the server is keeping uploads somewhere that will not
+  // survive its next deploy.
+  const uploadsAtRisk = synced && !session.mediaDurable
 
   const afterChange = async (): Promise<void> => {
     // Both stores read from whichever backend is now current.
@@ -60,18 +71,28 @@ export function SessionMenu() {
         type="button"
         onClick={() => setOpen((v) => !v)}
         title={
-          synced
-            ? `Signed in as ${session.username}. Projects and the reference library are on the server.`
-            : 'Working locally. Nothing leaves this browser.'
+          uploadsAtRisk
+            ? `Signed in as ${session.username}, but this server's uploads will not survive a redeploy.`
+            : synced
+              ? `Signed in as ${session.username}. Projects and the reference library are on the server.`
+              : 'Working locally. Nothing leaves this browser.'
         }
         className={cn(
           'flex h-7 items-center gap-1.5 rounded-md border px-2 text-2xs transition-colors',
-          synced
-            ? 'border-accent/40 bg-accent-soft text-accent'
-            : 'border-line text-ink-muted hover:bg-hover hover:text-ink',
+          uploadsAtRisk
+            ? 'border-warn/50 bg-warn/10 text-warn'
+            : synced
+              ? 'border-accent/40 bg-accent-soft text-accent'
+              : 'border-line text-ink-muted hover:bg-hover hover:text-ink',
         )}
       >
-        {synced ? <Cloud size={11} /> : <HardDrive size={11} />}
+        {uploadsAtRisk ? (
+          <AlertTriangle size={11} />
+        ) : synced ? (
+          <Cloud size={11} />
+        ) : (
+          <HardDrive size={11} />
+        )}
         <span className="max-w-[90px] truncate">
           {synced ? session.username : 'Local only'}
         </span>
@@ -84,6 +105,24 @@ export function SessionMenu() {
               <p className="text-xs font-medium text-ink">
                 Signed in as {session.username}
               </p>
+
+              {uploadsAtRisk && (
+                <div className="mt-2 rounded border border-warn/50 bg-warn/10 p-2">
+                  <p className="flex items-start gap-1.5 text-[11px] leading-relaxed text-ink">
+                    <AlertTriangle size={11} className="mt-px shrink-0 text-warn" />
+                    <span>
+                      <span className="font-medium">
+                        Uploads will not survive a redeploy.
+                      </span>{' '}
+                      This server is storing fonts on its own filesystem,
+                      which most hosts replace on every deploy. Projects saved
+                      here can stop opening without warning. Point{' '}
+                      <span className="font-mono">DJANGO_MEDIA_BACKEND</span>{' '}
+                      at object storage, or keep working locally.
+                    </span>
+                  </p>
+                </div>
+              )}
               <ul className="mt-2 space-y-1 text-[11px] text-ink-muted">
                 <li className="flex gap-1.5">
                   <Cloud size={11} className="mt-px shrink-0" />

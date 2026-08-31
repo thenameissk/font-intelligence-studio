@@ -118,13 +118,24 @@ def whoami(request: HttpRequest) -> JsonResponse:
     Called once at boot so the studio knows whether server storage is
     available. An anonymous answer is normal, not an error: the application
     works entirely locally without an account.
+
+    `mediaDurable` reports whether uploaded fonts are on storage that
+    survives a redeploy. It is surfaced in the interface rather than only in
+    the logs, because the failure it describes is silent: everything works
+    perfectly until a deploy, and then every uploaded font is gone.
     """
+    from django.conf import settings
+
     user = request.user
     return JsonResponse(
         {
             "authenticated": user.is_authenticated,
             "username": user.get_username() if user.is_authenticated else None,
             "isStaff": bool(getattr(user, "is_staff", False)),
+            "mediaDurable": (
+                settings.DEBUG
+                or getattr(settings, "MEDIA_BACKEND", "local") == "s3"
+            ),
         }
     )
 

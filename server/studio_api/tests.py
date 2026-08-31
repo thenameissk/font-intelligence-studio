@@ -26,6 +26,14 @@ class SessionTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["authenticated"])
 
+    def test_session_reports_whether_uploads_survive_a_redeploy(self):
+        # Silent data loss otherwise: local media on an ephemeral host works
+        # perfectly right up until the next deploy erases it.
+        with self.settings(DEBUG=False, MEDIA_BACKEND="local"):
+            self.assertFalse(self.client.get("/api/session/").json()["mediaDurable"])
+        with self.settings(DEBUG=False, MEDIA_BACKEND="s3"):
+            self.assertTrue(self.client.get("/api/session/").json()["mediaDurable"])
+
     def test_sign_in_and_out(self):
         User.objects.create_user("ana", password="correct-horse")
 

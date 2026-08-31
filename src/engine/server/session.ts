@@ -14,6 +14,15 @@ export interface ServerSession {
   authenticated: boolean
   username: string | null
   isStaff: boolean
+  /**
+   * Whether fonts uploaded to this server survive a redeploy.
+   *
+   * False means the host is writing them to a filesystem that gets thrown
+   * away. Everything works until the next deploy, at which point every
+   * uploaded font is gone and the projects using them will not open — so
+   * this is shown in the interface, not buried in a log.
+   */
+  mediaDurable: boolean
 }
 
 export const OFFLINE: ServerSession = {
@@ -21,6 +30,7 @@ export const OFFLINE: ServerSession = {
   authenticated: false,
   username: null,
   isStaff: false,
+  mediaDurable: true,
 }
 
 /**
@@ -119,8 +129,9 @@ export async function fetchSession(): Promise<ServerSession> {
       authenticated: boolean
       username: string | null
       isStaff: boolean
+      mediaDurable?: boolean
     }>('session/')
-    return { available: true, ...body }
+    return { available: true, mediaDurable: true, ...body }
   } catch {
     // A server that cannot answer is, for our purposes, no server.
     return OFFLINE
@@ -135,15 +146,18 @@ export async function signIn(
     'session/sign-in/',
     { method: 'POST', body: JSON.stringify({ username, password }) },
   )
-  return {
-    available: true,
-    authenticated: body.authenticated,
-    username: body.username,
-    isStaff: false,
-  }
+  // The durability flag comes from the session endpoint; re-read it rather
+  // than assuming, so the warning appears immediately after signing in.
+  return { ...(await fetchSession()), authenticated: body.authenticated }
 }
 
 export async function signOut(): Promise<ServerSession> {
   await request('session/sign-out/', { method: 'POST' })
-  return { available: true, authenticated: false, username: null, isStaff: false }
+  return {
+    available: true,
+    authenticated: false,
+    username: null,
+    isStaff: false,
+    mediaDurable: true,
+  }
 }

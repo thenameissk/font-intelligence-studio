@@ -52,18 +52,22 @@ services:
       - key: DJANGO_MIGRATE_ON_START
         value: "1"
 
-      # --- Uploaded fonts: set these in the Render dashboard ---------------
-      # Marked sync:false so Render prompts for them rather than storing
-      # credentials in this file.
+      # --- Uploaded fonts ---------------------------------------------
+      # Left as 'local' so the first deploy needs nothing but Render. The
+      # studio still works fully: signed out it is entirely browser-based,
+      # and signed in it warns in the toolbar that uploads will not survive
+      # a redeploy.
+      #
+      # Before anyone relies on server-side projects, add object storage in
+      # the Render dashboard (Environment tab) and redeploy:
+      #
+      #   DJANGO_MEDIA_BACKEND   = s3
+      #   AWS_STORAGE_BUCKET_NAME= your-bucket
+      #   AWS_ACCESS_KEY_ID      = …
+      #   AWS_SECRET_ACCESS_KEY  = …
+      #   AWS_S3_ENDPOINT_URL    = https://<ACCOUNT_ID>.r2.cloudflarestorage.com
+      #   AWS_S3_REGION_NAME     = auto
+      #
+      # See RENDER.md section 1 for the Cloudflare R2 walkthrough.
       - key: DJANGO_MEDIA_BACKEND
-        value: s3
-      - key: AWS_STORAGE_BUCKET_NAME
-        sync: false
-      - key: AWS_ACCESS_KEY_ID
-        sync: false
-      - key: AWS_SECRET_ACCESS_KEY
-        sync: false
-      - key: AWS_S3_ENDPOINT_URL
-        sync: false      # Cloudflare R2 / B2 / Spaces. Leave blank for AWS.
-      - key: AWS_S3_REGION_NAME
-        value: auto
+        value: local
