@@ -1,0 +1,171 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/*
+ * Semantic tokens. Utilities resolve to CSS variables so theme switching is a
+ * single class on <html> with no re-render and no flash.
+ */
+@theme {
+  --color-base: var(--fis-base);
+  --color-panel: var(--fis-panel);
+  --color-elevated: var(--fis-elevated);
+  --color-input: var(--fis-input);
+  --color-hover: var(--fis-hover);
+  --color-active: var(--fis-active);
+
+  --color-line: var(--fis-line);
+  --color-line-strong: var(--fis-line-strong);
+
+  --color-ink: var(--fis-ink);
+  --color-ink-muted: var(--fis-ink-muted);
+  --color-ink-faint: var(--fis-ink-faint);
+
+  --color-accent: var(--fis-accent);
+  --color-accent-soft: var(--fis-accent-soft);
+  --color-on-accent: var(--fis-on-accent);
+
+  --color-warn: var(--fis-warn);
+  --color-danger: var(--fis-danger);
+  --color-ok: var(--fis-ok);
+
+  --color-guide: var(--fis-guide);
+  --color-guide-strong: var(--fis-guide-strong);
+  --color-glyph: var(--fis-glyph);
+
+  --font-ui:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono:
+    ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --text-2xs: 0.6875rem;
+  --text-2xs--line-height: 1rem;
+}
+
+:root {
+  --fis-base: oklch(97.2% 0.002 260);
+  --fis-panel: oklch(99.3% 0.001 260);
+  --fis-elevated: oklch(100% 0 0);
+  --fis-input: oklch(97.8% 0.002 260);
+  --fis-hover: oklch(94.5% 0.003 260);
+  --fis-active: oklch(91% 0.004 260);
+
+  --fis-line: oklch(90.5% 0.004 260);
+  --fis-line-strong: oklch(83% 0.006 260);
+
+  --fis-ink: oklch(24% 0.008 260);
+  --fis-ink-muted: oklch(50% 0.008 260);
+  --fis-ink-faint: oklch(65% 0.006 260);
+
+  --fis-accent: oklch(55% 0.19 258);
+  --fis-accent-soft: oklch(94% 0.035 258);
+  --fis-on-accent: oklch(100% 0 0);
+
+  --fis-warn: oklch(63% 0.15 68);
+  --fis-danger: oklch(56% 0.21 25);
+  --fis-ok: oklch(58% 0.14 152);
+
+  --fis-guide: oklch(88% 0.02 258);
+  --fis-guide-strong: oklch(72% 0.06 258);
+  --fis-glyph: oklch(28% 0.01 260);
+
+  color-scheme: light;
+}
+
+.dark {
+  --fis-base: oklch(17.5% 0.006 265);
+  --fis-panel: oklch(21% 0.007 265);
+  --fis-elevated: oklch(24.5% 0.008 265);
+  --fis-input: oklch(26% 0.008 265);
+  --fis-hover: oklch(29% 0.009 265);
+  --fis-active: oklch(33% 0.01 265);
+
+  --fis-line: oklch(28% 0.008 265);
+  --fis-line-strong: oklch(38% 0.01 265);
+
+  --fis-ink: oklch(93% 0.004 265);
+  --fis-ink-muted: oklch(68% 0.008 265);
+  --fis-ink-faint: oklch(52% 0.008 265);
+
+  --fis-accent: oklch(68% 0.15 254);
+  --fis-accent-soft: oklch(32% 0.06 254);
+  --fis-on-accent: oklch(16% 0.01 265);
+
+  --fis-warn: oklch(76% 0.14 70);
+  --fis-danger: oklch(68% 0.18 25);
+  --fis-ok: oklch(72% 0.14 155);
+
+  --fis-guide: oklch(33% 0.015 258);
+  --fis-guide-strong: oklch(48% 0.05 258);
+  --fis-glyph: oklch(92% 0.004 265);
+
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--fis-line);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    background-color: var(--fis-base);
+    color: var(--fis-ink);
+    font-family: var(--font-ui);
+    font-size: 13px;
+    line-height: 1.45;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    overscroll-behavior: none;
+  }
+
+  /* A design tool should not show text selection carets everywhere. */
+  body {
+    user-select: none;
+  }
+
+  input,
+  textarea,
+  [contenteditable],
+  [data-selectable] {
+    user-select: text;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--fis-accent);
+    outline-offset: 1px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--fis-line-strong);
+    border: 3px solid transparent;
+    border-radius: 99px;
+    background-clip: content-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--fis-ink-faint);
+    border: 3px solid transparent;
+    background-clip: content-box;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+  .no-drag {
+    -webkit-user-drag: none;
+  }
+}

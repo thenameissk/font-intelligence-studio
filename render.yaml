@@ -1,0 +1,69 @@
+# Render Blueprint for Font Intelligence Studio.
+#
+# Creates a web service and a Postgres database. Point Render at this repo,
+# choose "New > Blueprint", and it reads this file.
+#
+# Uploaded fonts go to S3-compatible object storage, which you supply — see
+# DEPLOY.md. Render's disks are per-instance and its free tier has no disk at
+# all, so local media would not survive a redeploy.
+
+databases:
+  - name: font-studio-db
+    databaseName: fontstudio
+    user: fontstudio
+    plan: free          # free Postgres expires; move to a paid plan for real use
+
+services:
+  - type: web
+    name: font-studio
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free          # free web services sleep after inactivity
+    healthCheckPath: /healthz/
+    autoDeploy: true
+
+    envVars:
+      # Generated once by Render and kept. Changing it signs everyone out.
+      - key: DJANGO_SECRET_KEY
+        generateValue: true
+
+      - key: DATABASE_URL
+        fromDatabase:
+          name: font-studio-db
+          property: connectionString
+
+      - key: DJANGO_DEBUG
+        value: "0"
+
+      # ALLOWED_HOSTS and CSRF_TRUSTED_ORIGINS are derived from
+      # RENDER_EXTERNAL_HOSTNAME, which Render sets. Add DJANGO_ALLOWED_HOSTS
+      # only when you attach a custom domain.
+
+      # Render terminates TLS at its router and forwards over plain HTTP.
+      # Django is told about that via SECURE_PROXY_SSL_HEADER, and Render
+      # already redirects HTTP to HTTPS, so leaving Django's own redirect off
+      # avoids a redirect loop.
+      - key: DJANGO_SECURE_SSL_REDIRECT
+        value: "0"
+
+      # Migrations run at container start. Fine for a single instance; move
+      # to a pre-deploy command if you scale beyond one.
+      - key: DJANGO_MIGRATE_ON_START
+        value: "1"
+
+      # --- Uploaded fonts: set these in the Render dashboard ---------------
+      # Marked sync:false so Render prompts for them rather than storing
+      # credentials in this file.
+      - key: DJANGO_MEDIA_BACKEND
+        value: s3
+      - key: AWS_STORAGE_BUCKET_NAME
+        sync: false
+      - key: AWS_ACCESS_KEY_ID
+        sync: false
+      - key: AWS_SECRET_ACCESS_KEY
+        sync: false
+      - key: AWS_S3_ENDPOINT_URL
+        sync: false      # Cloudflare R2 / B2 / Spaces. Leave blank for AWS.
+      - key: AWS_S3_REGION_NAME
+        value: auto

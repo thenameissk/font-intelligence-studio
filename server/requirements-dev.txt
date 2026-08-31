@@ -1,0 +1,6 @@
+# Development and test extras, on top of requirements.txt.
+-r requirements.txt
+
+# Exercises the S3 upload path against a real S3 implementation, so the
+# storage backend is tested rather than assumed.
+moto[s3]>=5.0

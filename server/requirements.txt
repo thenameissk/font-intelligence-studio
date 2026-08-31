@@ -1,0 +1,19 @@
+# Font Intelligence Studio server.
+#
+# Thin on purpose: the studio parses, analyses, edits and exports fonts in
+# the browser. The server stores projects and shares a font library.
+
+Django>=5.2,<7.0
+gunicorn>=23.0
+whitenoise>=6.7          # serves static files from the app server
+dj-database-url>=2.2     # DATABASE_URL parsing
+
+# PostgreSQL. Not needed if you are staying on SQLite, but you should not
+# stay on SQLite.
+psycopg[binary]>=3.2
+
+# S3-compatible storage for uploaded fonts: AWS, Cloudflare R2, Backblaze
+# B2, DigitalOcean Spaces, MinIO. Required unless media sits on a durable
+# volume.
+django-storages>=1.14
+boto3>=1.35
