@@ -7,8 +7,20 @@ import { createGray, type GrayImage } from './types'
 import { analyzeThreshold, inkField } from './threshold'
 import { traceContours } from './trace'
 import { simplifyPolyline, vectorizePolygons } from './vectorize'
-import { fitOutlineToMetrics, normalizeWinding, VERTICAL_FIT, HORIZONTAL_FIT } from './fitToMetrics'
-import { countNodes, outlineBounds, contourDirection } from '@/engine/geometry/outline'
+import {
+  fitOutlineToMetrics,
+  normalizeWinding,
+  SOURCE_SPACE,
+  VERTICAL_FIT,
+  HORIZONTAL_FIT,
+} from './fitToMetrics'
+import {
+  commandsToOutline,
+  countNodes,
+  outlineBounds,
+  contourDirection,
+} from '@/engine/geometry/outline'
+import type { PathCommand } from 'opentype.js'
 import { inkArea } from '@/engine/geometry/intersect'
 import { contourIsOuter } from '@/engine/geometry/nesting'
 import type { VerticalMetrics } from '@/types/font'
@@ -280,5 +292,118 @@ describe('end to end', () => {
     expect(bounds.yMin).toBeCloseTo(0, 0)
     expect(bounds.yMax).toBeCloseTo(700, 0)
     expect(inkArea(fitted.outline)).toBeGreaterThan(0)
+  })
+})
+
+describe('borrowing a glyph from another font', () => {
+  const target = {
+    bounds: { xMin: 60, yMin: -250, xMax: 460, yMax: 500 },
+    advanceWidth: 560,
+    isEmpty: false,
+  }
+
+  /** A 'p': bowl from baseline to x-height, stem descending below. */
+  function pShape(xHeight: number, descender: number): PathCommand[] {
+    return [
+      { type: 'M', x: 0, y: descender },
+      { type: 'L', x: 120, y: descender },
+      { type: 'L', x: 120, y: xHeight },
+      { type: 'L', x: 0, y: xHeight },
+      { type: 'Z' },
+      { type: 'M', x: 140, y: 0 },
+      { type: 'L', x: 500, y: 0 },
+      { type: 'L', x: 500, y: xHeight },
+      { type: 'L', x: 140, y: xHeight },
+      { type: 'Z' },
+    ]
+  }
+
+  const sourceMetrics = { unitsPerEm: 1000, xHeight: 500, capHeight: 700 }
+
+  it('keeps the descender below the baseline', () => {
+    // Fitting by bounding box squashes bowl and descender together into the
+    // x-height: the letter lands a third too small, sitting on the baseline
+    // with no descender at all.
+    const fitted = fitOutlineToMetrics(commandsToOutline(pShape(500, -250)), {
+      metrics: METRICS,
+      target,
+      outlineFormat: 'truetype',
+      vertical: VERTICAL_FIT.XHeight,
+      sourceSpace: SOURCE_SPACE.Font,
+      sourceMetrics,
+    })
+    const bounds = outlineBounds(fitted.outline)
+    expect(bounds.yMax).toBeCloseTo(METRICS.xHeight!, 0)
+    // Still descending, scaled by the same ratio as the rest of the letter.
+    expect(bounds.yMin).toBeLessThan(-200)
+  })
+
+  it('rescales by the ratio of the two x-heights', () => {
+    // Source x-height 500, target 520: everything grows by 4%.
+    const fitted = fitOutlineToMetrics(commandsToOutline(pShape(500, -250)), {
+      metrics: METRICS,
+      target,
+      outlineFormat: 'truetype',
+      vertical: VERTICAL_FIT.XHeight,
+      sourceSpace: SOURCE_SPACE.Font,
+      sourceMetrics,
+    })
+    const bounds = outlineBounds(fitted.outline)
+    const ratio = METRICS.xHeight! / 500
+    expect(bounds.yMax).toBeCloseTo(500 * ratio, 0)
+    expect(bounds.yMin).toBeCloseTo(-250 * ratio, 0)
+  })
+
+  it('scales a font with a different em the same way', () => {
+    // A 2048-unit font with a 1024 x-height must land identically to a
+    // 1000-unit font with a 500 x-height: same proportion, same result.
+    const big = fitOutlineToMetrics(commandsToOutline(pShape(1024, -512)), {
+      metrics: METRICS,
+      target,
+      outlineFormat: 'truetype',
+      vertical: VERTICAL_FIT.XHeight,
+      sourceSpace: SOURCE_SPACE.Font,
+      sourceMetrics: { unitsPerEm: 2048, xHeight: 1024, capHeight: 1434 },
+    })
+    const bounds = outlineBounds(big.outline)
+    expect(bounds.yMax).toBeCloseTo(METRICS.xHeight!, 0)
+  })
+
+  it('still keeps the font’s own advance and left bearing', () => {
+    const fitted = fitOutlineToMetrics(commandsToOutline(pShape(500, -250)), {
+      metrics: METRICS,
+      target,
+      outlineFormat: 'truetype',
+      vertical: VERTICAL_FIT.XHeight,
+      sourceSpace: SOURCE_SPACE.Font,
+      sourceMetrics,
+    })
+    expect(fitted.advanceWidth).toBe(560)
+    expect(outlineBounds(fitted.outline).xMin).toBeCloseTo(60, 0)
+  })
+
+  it('uses cap height when asked, for an uppercase letter', () => {
+    const fitted = fitOutlineToMetrics(commandsToOutline(pShape(700, 0)), {
+      metrics: METRICS,
+      target,
+      outlineFormat: 'truetype',
+      vertical: VERTICAL_FIT.CapHeight,
+      sourceSpace: SOURCE_SPACE.Font,
+      sourceMetrics,
+    })
+    expect(outlineBounds(fitted.outline).yMax).toBeCloseTo(METRICS.capHeight!, 0)
+  })
+
+  it('says what it did', () => {
+    const fitted = fitOutlineToMetrics(commandsToOutline(pShape(500, -250)), {
+      metrics: METRICS,
+      target,
+      outlineFormat: 'truetype',
+      vertical: VERTICAL_FIT.XHeight,
+      sourceSpace: SOURCE_SPACE.Font,
+      sourceMetrics,
+    })
+    expect(fitted.notes.join(' ')).toMatch(/x-height/i)
+    expect(fitted.notes.join(' ')).toMatch(/baseline aligned/i)
   })
 })

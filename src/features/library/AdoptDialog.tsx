@@ -49,8 +49,15 @@ export function AdoptDialog({
         outlineFormat: parsed.metadata.outlineFormat,
         vertical,
         sourceSpace: SOURCE_SPACE.Font,
+        // Without the source font's own metrics the fit falls back to
+        // bounding boxes, which squashes a descender into the x-height.
+        sourceMetrics: {
+          unitsPerEm: specimen.unitsPerEm,
+          xHeight: specimen.xHeight,
+          capHeight: specimen.capHeight,
+        },
       }),
-    [specimen.outline, parsed, glyph, vertical],
+    [specimen, parsed, glyph, vertical],
   )
 
   const char = glyph.unicode !== null ? String.fromCodePoint(glyph.unicode) : null

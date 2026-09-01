@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AlertTriangle,
   Download,
@@ -42,7 +42,17 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
   const [includeKerning, setIncludeKerning] = useState(true)
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<ExportResult | null>(null)
+  const [downloadUrl, setDownloadUrl] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+
+  // The blob outlives the export call, so it has to be released when the
+  // dialog closes or a second export replaces it.
+  useEffect(
+    () => () => {
+      if (downloadUrl) URL.revokeObjectURL(downloadUrl)
+    },
+    [downloadUrl],
+  )
 
   const checks = useMemo(() => {
     if (!parsed) return []
@@ -98,8 +108,15 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
         outlines,
         includeKerning,
       })
+      const url = URL.createObjectURL(
+        new Blob([exported.data], { type: exported.mimeType }),
+      )
       setResult(exported)
-      download(exported)
+      setDownloadUrl((previous) => {
+        if (previous) URL.revokeObjectURL(previous)
+        return url
+      })
+      attemptDownload(url, exported.fileName)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught))
     } finally {
@@ -234,6 +251,20 @@ export function ExportDialog({ onClose }: { onClose: () => void }) {
                 <span className="font-mono">{result.fileName}</span> ·{' '}
                 {formatBytes(result.stats.bytes)}
               </p>
+              {downloadUrl && (
+                <a
+                  href={downloadUrl}
+                  download={result.fileName}
+                  className="mt-2 inline-flex h-7 items-center gap-1.5 rounded-md border border-transparent bg-accent px-2.5 text-xs font-medium text-on-accent hover:opacity-90"
+                >
+                  <Download size={12} />
+                  Save {result.fileName}
+                </a>
+              )}
+              <p className="mt-1 text-[10px] text-ink-faint">
+                The download usually starts on its own. If your browser
+                blocked it, use the button above.
+              </p>
               <p className="mt-1 text-2xs text-ink-muted">
                 {result.stats.reEncodedGlyphs} of {result.stats.glyphCount}{' '}
                 glyphs re-encoded, {result.stats.preservedTables.length} tables
@@ -324,16 +355,29 @@ function WarningRow({ warning }: { warning: ImportWarning }) {
   )
 }
 
-function download(result: ExportResult): void {
-  const blob = new Blob([result.data], { type: result.mimeType })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = result.fileName
-  document.body.appendChild(link)
-  link.click()
-  link.remove()
-  // Give the browser a moment to start the download before revoking.
-  setTimeout(() => URL.revokeObjectURL(url), 10_000)
+/**
+ * Attempts to save the file without further clicking.
+ *
+ * This is best-effort, and deliberately not the only route. Building a font
+ * is asynchronous, so by the time the bytes exist the browser no longer
+ * regards the original click as the cause of the download, and a synthetic
+ * anchor click may be ignored with no error anywhere — the export appears
+ * to succeed and no file arrives. The dialog therefore also shows a real
+ * link the person can click, which browsers always honour.
+ */
+function attemptDownload(url: string, fileName: string): void {
+  try {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = fileName
+    link.rel = 'noopener'
+    document.body.appendChild(link)
+    link.click()
+    // Removing the element in the same tick can cancel the download in
+    // some browsers; let it settle first.
+    setTimeout(() => link.remove(), 1000)
+  } catch {
+    // The visible link below is the reliable path anyway.
+  }
 }
 

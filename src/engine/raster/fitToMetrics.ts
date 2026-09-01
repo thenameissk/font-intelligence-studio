@@ -54,12 +54,34 @@ export const SOURCE_SPACE = {
 } as const
 export type SourceSpace = (typeof SOURCE_SPACE)[keyof typeof SOURCE_SPACE]
 
+/** The parts of a source font's metrics needed to rescale one of its glyphs. */
+export interface SourceMetrics {
+  unitsPerEm: number
+  xHeight: number | null
+  capHeight: number | null
+}
+
 export interface FitOptions {
   metrics: VerticalMetrics
   target: FitTarget
   outlineFormat: OutlineFormat
   vertical?: VerticalFit
   horizontal?: HorizontalFit
+  /**
+   * The source's own font metrics, when the outline came from another font
+   * rather than from an image.
+   *
+   * This changes the arithmetic completely, and has to. Fitting by bounding
+   * box assumes the box *is* the letter, which is only true for a letter
+   * that neither ascends nor descends. Fit a 'p' that way and its bowl plus
+   * its descender get squashed together into the x-height: the letter comes
+   * out a third too small and sitting on the baseline with no descender at
+   * all.
+   *
+   * With both fonts' metrics in hand the answer is simply the ratio of
+   * their x-heights, and the baseline stays where a baseline belongs.
+   */
+  sourceMetrics?: SourceMetrics
   /**
    * Which way up the source is. A trace arrives from image space and has to
    * be flipped; a glyph borrowed from another font is already upright, and
@@ -115,6 +137,7 @@ export function fitOutlineToMetrics(
     (options.sourceSpace ?? SOURCE_SPACE.Image) === SOURCE_SPACE.Image
       ? transformOutline(traced, scaling(1, -1))
       : traced
+
   const source = outlineBounds(flipped)
   const sourceHeight = source.yMax - source.yMin
   const sourceWidth = source.xMax - source.xMin
@@ -122,7 +145,55 @@ export function fitOutlineToMetrics(
     return { outline: traced, advanceWidth: target.advanceWidth, notes }
   }
 
-  // How tall should it be, and where does its foot sit?
+  // ---- A glyph borrowed from another font ------------------------------
+  if (options.sourceMetrics) {
+    const from = options.sourceMetrics
+    const useCapHeight = vertical === VERTICAL_FIT.CapHeight
+
+    const sourceReference = useCapHeight
+      ? (from.capHeight ?? from.unitsPerEm * 0.7)
+      : (from.xHeight ?? from.unitsPerEm * 0.5)
+    const targetReference = useCapHeight
+      ? (metrics.capHeight ?? metrics.unitsPerEm * 0.7)
+      : (metrics.xHeight ?? metrics.unitsPerEm * 0.5)
+
+    const ratio =
+      sourceReference > 0 ? targetReference / sourceReference : 1
+
+    // Scaled about the origin, so the baseline stays the baseline and an
+    // ascender or descender keeps its proper reach.
+    const scaled = transformOutline(flipped, scaling(ratio, ratio))
+    const scaledBounds = outlineBounds(scaled)
+    const inkWidth = scaledBounds.xMax - scaledBounds.xMin
+
+    let left: number
+    if (horizontal === HORIZONTAL_FIT.Centre || target.isEmpty) {
+      left = (target.advanceWidth - inkWidth) / 2
+      notes.push('Centred within this font’s advance width.')
+    } else {
+      left = target.bounds.xMin
+      notes.push(`Left bearing kept at ${Math.round(target.bounds.xMin)} units.`)
+    }
+
+    const placedByMetrics = transformOutline(
+      scaled,
+      translation(left - scaledBounds.xMin, 0),
+    )
+
+    notes.unshift(
+      `Scaled to this font’s ${useCapHeight ? 'cap height' : 'x-height'} ` +
+        `(${(ratio * 100).toFixed(0)}% of its original size), baseline aligned.`,
+    )
+
+    return {
+      outline: normalizeWinding(placedByMetrics, options.outlineFormat),
+      advanceWidth: target.advanceWidth,
+      notes: [...notes, 'Contour directions set for this font’s outline format.'],
+    }
+  }
+
+  // ---- A shape traced from an image ------------------------------------
+  // No metrics to relate it to, so the bounding box is all there is.
   let targetHeight: number
   let baseline: number
   const usableTarget = !target.isEmpty && target.bounds.yMax > target.bounds.yMin
@@ -161,13 +232,9 @@ export function fitOutlineToMetrics(
 
   const scaled = transformOutline(
     flipped,
-    multiply(
-      translation(-source.xMin, -source.yMin),
-      scaling(scaleX, scaleY),
-    ),
+    multiply(translation(-source.xMin, -source.yMin), scaling(scaleX, scaleY)),
   )
 
-  // Where does it sit horizontally? The font's own bearings decide.
   const scaledBounds = outlineBounds(scaled)
   const inkWidth = scaledBounds.xMax - scaledBounds.xMin
   let left: number
@@ -177,9 +244,7 @@ export function fitOutlineToMetrics(
     notes.push('Centred within the font’s advance width.')
   } else if (usableTarget) {
     left = target.bounds.xMin
-    notes.push(
-      `Left bearing kept at ${Math.round(target.bounds.xMin)} units.`,
-    )
+    notes.push(`Left bearing kept at ${Math.round(target.bounds.xMin)} units.`)
   } else {
     left = (target.advanceWidth - inkWidth) / 2
     notes.push('Centred, since the glyph had no outline to take bearings from.')

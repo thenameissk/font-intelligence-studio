@@ -170,8 +170,15 @@ export function VariantGrid({
               },
               outlineFormat: parsed.metadata.outlineFormat,
               vertical,
-              // Borrowed from another font, so already the right way up.
+              // Borrowed from another font, so already the right way up,
+              // and rescaled by the ratio of the two x-heights rather than
+              // by bounding box.
               sourceSpace: SOURCE_SPACE.Font,
+              sourceMetrics: {
+                unitsPerEm: chosen.unitsPerEm,
+                xHeight: chosen.xHeight,
+                capHeight: chosen.capHeight,
+              },
             })
             useHistoryStore.getState().commit(
               `Adopt ${chosen.family} ${String.fromCodePoint(codepoint)}`,
