@@ -52,6 +52,7 @@ import {
 } from './canvasTransform'
 import { snapPoint, type SnapTarget } from './snapping'
 import { buildMetricLines } from './metricLines'
+import { GridLayer } from './layers/GridLayer'
 import { MetricsLayer } from './layers/MetricsLayer'
 import { OutlineLayer } from './layers/OutlineLayer'
 import { NodesLayer } from './layers/NodesLayer'
@@ -183,6 +184,7 @@ export function GlyphCanvas({
   const showDirection = useEditorStore((s) => s.showContourDirection)
   const snapEnabled = useEditorStore((s) => s.snapEnabled)
   const snapGrid = useEditorStore((s) => s.snapGrid)
+  const showGrid = useEditorStore((s) => s.showGrid)
   const guides = useEditorStore((s) => s.guides)
   const addGuide = useEditorStore((s) => s.addGuide)
   const moveGuide = useEditorStore((s) => s.moveGuide)
@@ -1142,6 +1144,16 @@ export function GlyphCanvas({
         onDoubleClick={onDoubleClick}
         className="touch-none select-none"
       >
+        {showGrid && (
+          <GridLayer
+            view={view}
+            width={size.width}
+            height={size.height}
+            spacing={Math.max(snapGrid, parsed.verticalMetrics.unitsPerEm / 100)}
+            unitsPerEm={parsed.verticalMetrics.unitsPerEm}
+          />
+        )}
+
         {showMetrics && (
           <MetricsLayer
             view={view}

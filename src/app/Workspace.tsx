@@ -8,6 +8,7 @@ import { usePreviewedGlyphs } from '@/features/transformations/usePreview'
 import { TransformPanel } from '@/features/transformations/TransformPanel'
 import { RelatedGlyphsPanel } from '@/features/transformations/RelatedGlyphsPanel'
 import { PathOpsPanel } from '@/features/glyph-editor/PathOpsPanel'
+import { AnchorInspector } from '@/features/glyph-editor/AnchorInspector'
 import { VariantsPanel } from '@/features/variants/VariantsPanel'
 import { ReferencePanel } from '@/features/reference/ReferencePanel'
 import { useEditorStore } from '@/store/editorStore'
@@ -81,6 +82,9 @@ export function WorkspaceInspector({ parsed }: { parsed: ParsedFont }) {
         <Inspector parsed={parsed} glyph={primary} />
       )}
       {selected.length === 1 && primary && (
+        <AnchorInspector glyph={primary} />
+      )}
+      {selected.length === 1 && primary && (
         <VariantsPanel parsed={parsed} glyph={primary} />
       )}
       {selected.length === 1 && primary && (
@@ -93,6 +97,7 @@ export function WorkspaceInspector({ parsed }: { parsed: ParsedFont }) {
         />
       )}
       <TransformPanel
+        metrics={parsed.verticalMetrics}
         glyphs={glyphs}
         label={
           selected.length > 1

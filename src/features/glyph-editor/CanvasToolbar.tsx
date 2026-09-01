@@ -28,6 +28,8 @@ export function CanvasToolbar() {
   const showFilled = useEditorStore((s) => s.showFilled)
   const showDirection = useEditorStore((s) => s.showContourDirection)
   const snapEnabled = useEditorStore((s) => s.snapEnabled)
+  const showGrid = useEditorStore((s) => s.showGrid)
+  const toggleGrid = useEditorStore((s) => s.toggleGrid)
 
   return (
     <div className="flex h-9 shrink-0 items-center gap-0.5 border-b border-line bg-panel px-2">
@@ -97,6 +99,9 @@ export function CanvasToolbar() {
         onClick={() => toggle('snapEnabled')}
       >
         <Magnet size={13} />
+      </IconButton>
+      <IconButton label="Unit grid" active={showGrid} onClick={toggleGrid}>
+        <Grid3x3 size={13} />
       </IconButton>
 
       <div className="flex-1" />

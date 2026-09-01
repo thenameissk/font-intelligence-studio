@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Check, RotateCcw, X } from 'lucide-react'
-import type { ResolvedGlyph } from '@/types/font'
+import type { ResolvedGlyph, VerticalMetrics } from '@/types/font'
 import {
   applyTransformSpec,
   describeSpec,
@@ -15,6 +15,7 @@ import { NumberInput } from '@/components/ui/NumberInput'
 import { PanelSection, Row } from '@/components/ui/Panel'
 import { useHistoryStore } from '@/store/historyStore'
 import { useTransformStore } from '@/store/transformStore'
+import { ScopePicker } from './ScopePicker'
 import { cn } from '@/utils/cn'
 
 type Tab = 'transform' | 'shape' | 'spacing'
@@ -49,13 +50,18 @@ const PRESETS: Array<{ label: string; spec: TransformSpec }> = [
 export function TransformPanel({
   glyphs,
   label,
+  metrics,
 }: {
   glyphs: readonly ResolvedGlyph[]
   label: string
+  /** Needed to offer bands like "below the baseline"; omit to hide scoping. */
+  metrics?: VerticalMetrics
 }) {
   const [tab, setTab] = useState<Tab>('transform')
   const spec = useTransformStore((s) => s.spec)
   const setSpec = useTransformStore((s) => s.setSpec)
+  const scope = useTransformStore((s) => s.scope)
+  const setScope = useTransformStore((s) => s.setScope)
   const clear = useTransformStore((s) => s.clear)
   const commit = useHistoryStore((s) => s.commit)
 
@@ -69,7 +75,7 @@ export function TransformPanel({
 
   const apply = (): void => {
     if (!spec) return
-    const changes = applyTransformSpec(glyphs, spec)
+    const changes = applyTransformSpec(glyphs, spec, scope)
     if (Object.keys(changes).length > 0) {
       commit(describeSpec(spec), changes)
     }
@@ -80,6 +86,17 @@ export function TransformPanel({
 
   return (
     <PanelSection title={`Transform ${label}`}>
+      {/* Only meaningful on a single glyph: scoping by anchor across a
+          multi-glyph selection would mean different things in each. */}
+      {glyphs.length === 1 && metrics && (
+        <ScopePicker
+          glyph={glyphs[0]}
+          metrics={metrics}
+          scope={scope}
+          onChange={setScope}
+        />
+      )}
+
       <div className="mb-2 flex gap-0.5 rounded-md bg-input p-0.5">
         {(['transform', 'shape', 'spacing'] as const).map((value) => (
           <button

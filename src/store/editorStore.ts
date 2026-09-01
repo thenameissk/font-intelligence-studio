@@ -81,6 +81,10 @@ export interface EditorState {
   showFilled: boolean
   snapEnabled: boolean
   snapGrid: number
+  /** Draw the unit grid behind the glyph. */
+  showGrid: boolean
+  /** A second glyph shown beside the one being edited, for comparison. */
+  compareWith: number | null
   guides: Guide[]
 
   selectGlyph: (index: number, mode?: 'replace' | 'toggle' | 'range') => void
@@ -111,6 +115,8 @@ export interface EditorState {
       | 'snapEnabled',
   ) => void
   setSnapGrid: (value: number) => void
+  toggleGrid: () => void
+  setCompareWith: (index: number | null) => void
   addGuide: (axis: 'x' | 'y', value: number) => void
   moveGuide: (id: string, value: number) => void
   removeGuide: (id: string) => void
@@ -143,6 +149,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
   showFilled: true,
   snapEnabled: true,
   snapGrid: 1,
+  showGrid: false,
+  compareWith: null,
   guides: [],
 
   selectGlyph: (index, mode = 'replace') => {
@@ -229,6 +237,8 @@ export const useEditorStore = create<EditorState>((set, get) => ({
 
   toggle: (key) => set({ [key]: !get()[key] } as Partial<EditorState>),
   setSnapGrid: (snapGrid) => set({ snapGrid: Math.max(0, snapGrid) }),
+  toggleGrid: () => set({ showGrid: !get().showGrid }),
+  setCompareWith: (compareWith) => set({ compareWith }),
 
   addGuide: (axis, value) =>
     set({

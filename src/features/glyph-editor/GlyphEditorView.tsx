@@ -9,6 +9,7 @@ import { useFontStore } from '@/store/fontStore'
 import { CanvasToolbar } from './CanvasToolbar'
 import { GlyphCanvas } from './GlyphCanvas'
 import { ToolPalette } from './ToolPalette'
+import { CompareStrip } from './CompareStrip'
 
 export function GlyphEditorView() {
   const parsed = useFontStore((s) => s.parsed)
@@ -66,8 +67,11 @@ export function GlyphEditorView() {
       <CanvasToolbar />
       <div className="flex min-h-0 flex-1">
         <ToolPalette />
-        <div className="min-w-0 flex-1">
-          <GlyphCanvas parsed={parsed} glyph={glyph} dna={dna} />
+        <div className="flex min-w-0 flex-1 flex-col">
+          <div className="min-h-0 flex-1">
+            <GlyphCanvas parsed={parsed} glyph={glyph} dna={dna} />
+          </div>
+          <CompareStrip parsed={parsed} />
         </div>
       </div>
     </div>

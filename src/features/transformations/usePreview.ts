@@ -19,6 +19,7 @@ export function usePreviewedGlyphs(
 ): ResolvedGlyph[] {
   const edits = useFontStore((s) => s.edits)
   const spec = useTransformStore((s) => s.spec)
+  const scope = useTransformStore((s) => s.scope)
   const targets = useTransformStore((s) => s.targets)
 
   return useMemo(() => {
@@ -30,7 +31,7 @@ export function usePreviewedGlyphs(
     const affected = base.filter((glyph) => targetSet.has(glyph.index))
     if (affected.length === 0) return base
 
-    const preview = applyTransformSpec(affected, spec)
+    const preview = applyTransformSpec(affected, spec, scope)
     return base.map((glyph) => {
       const edit = preview[glyph.index]
       if (!edit) return glyph
@@ -47,7 +48,9 @@ export function usePreviewedGlyphs(
         isEmpty: outline.contours.length === 0,
       }
     })
-  }, [parsed, indices, edits, spec, targets])
+    // `scope` is a dependency: a preview computed for the whole glyph
+    // must not linger once the change has been narrowed to part of it.
+  }, [parsed, indices, edits, spec, targets, scope])
 }
 
 export function usePreviewedGlyph(

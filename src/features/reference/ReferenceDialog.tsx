@@ -15,6 +15,8 @@ import {
 } from '@/engine/transforms/styleMatch'
 import { applyTransformSpec } from '@/engine/transforms/applySpec'
 import { HORIZONTAL_FIT, VERTICAL_FIT } from '@/engine/raster/fitToMetrics'
+import { WHOLE_GLYPH, type EditScope } from '@/engine/transforms/scope'
+import { ScopePicker } from '@/features/transformations/ScopePicker'
 import { Button } from '@/components/ui/Button'
 import { NumberInput } from '@/components/ui/NumberInput'
 import { Segmented } from '@/components/ui/Segmented'
@@ -44,6 +46,11 @@ export function ReferenceDialog({
   const commit = useHistoryStore((s) => s.commit)
   const [mode, setMode] = useState<Mode>('trace')
   const [dropping, setDropping] = useState(false)
+  // Style matching can be limited to part of the letter: matching a
+  // reference's weight on the stem without touching the bowl is a normal
+  // thing to want, and applying everything everywhere is what makes an
+  // automatic adjustment feel blunt.
+  const [scope, setScope] = useState<EditScope>(WHOLE_GLYPH)
   // Keyed by proposal id. Absent means "use the default for its
   // confidence", so nothing has to be reset when the reference changes and
   // a stale entry for a proposal that no longer exists is harmless.
@@ -118,7 +125,7 @@ export function ReferenceDialog({
     // as a single undoable step rather than a stack of them.
     let working = glyph
     for (const proposal of accepted) {
-      const changes = applyTransformSpec([working], proposal.spec)
+      const changes = applyTransformSpec([working], proposal.spec, scope)
       const change = changes[working.index]
       if (!change?.outline) continue
       working = {
@@ -201,6 +208,7 @@ export function ReferenceDialog({
               state={state}
               mode={mode}
               proposals={accepted}
+              scope={scope}
             />
 
             <aside className="flex w-80 shrink-0 flex-col overflow-y-auto border-l border-line p-3">
@@ -212,6 +220,14 @@ export function ReferenceDialog({
                 />
               ) : (
                 <StyleControls
+                  scopePicker={
+                    <ScopePicker
+                      glyph={glyph}
+                      metrics={parsed.verticalMetrics}
+                      scope={scope}
+                      onChange={setScope}
+                    />
+                  }
                   axes={axes}
                   proposals={proposals}
                   isAccepted={isAccepted}
@@ -303,12 +319,14 @@ function Preview({
   state,
   mode,
   proposals,
+  scope,
 }: {
   parsed: ParsedFont
   glyph: ResolvedGlyph
   state: ReturnType<typeof useImageTrace>['state']
   mode: Mode
   proposals: StyleProposal[]
+  scope: EditScope
 }) {
   const metrics = parsed.verticalMetrics
   const upm = metrics.unitsPerEm
@@ -318,12 +336,12 @@ function Preview({
     if (mode !== 'style' || proposals.length === 0) return glyph.outline
     let working = glyph
     for (const proposal of proposals) {
-      const change = applyTransformSpec([working], proposal.spec)[working.index]
+      const change = applyTransformSpec([working], proposal.spec, scope)[working.index]
       if (!change?.outline) continue
       working = { ...working, outline: change.outline }
     }
     return working.outline
-  }, [mode, proposals, glyph])
+  }, [mode, proposals, glyph, scope])
 
   const currentPath = useMemo(
     () => outlineToSvgPathData(glyph.outline, 1),
@@ -547,6 +565,7 @@ function TraceControls({
 }
 
 function StyleControls({
+  scopePicker,
   axes,
   proposals,
   isAccepted,
@@ -554,6 +573,7 @@ function StyleControls({
   limitations,
   glyphEmpty,
 }: {
+  scopePicker: React.ReactNode
   axes: ReturnType<typeof compareProfiles>
   proposals: StyleProposal[]
   isAccepted: (proposal: StyleProposal) => boolean
@@ -565,6 +585,8 @@ function StyleControls({
 
   return (
     <div className="space-y-3">
+      {scopePicker}
+
       <Section title="Measured">
         <table className="w-full">
           <thead>
