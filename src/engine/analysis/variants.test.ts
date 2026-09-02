@@ -38,8 +38,9 @@ describeIf('SFNS.ttf')('variants from the font’s own features', () => {
 
     const alternates = findFeatureAlternates(parsed.otFont, a)
     expect(alternates.length).toBeGreaterThan(0)
-    // SF exposes it through both cv07 and ss07.
-    expect(alternates.map((x) => x.tag)).toContain('cv07')
+    // SF exposes it through both cv07 and ss07, and both names are kept.
+    expect(alternates.flatMap((x) => x.tags)).toContain('cv07')
+    expect(alternates.flatMap((x) => x.tags)).toContain('ss07')
 
     const variants = suggestVariants(parsed, {}, a)
     expect(variants.length).toBeGreaterThan(0)
@@ -147,5 +148,41 @@ describeIf('SFNS.ttf')('candidates that are not really variants', () => {
       expect(ratio).toBeGreaterThan(0.7)
       expect(ratio).toBeLessThan(1.45)
     }
+  })
+})
+
+describeIf('SFNS.ttf')('alternates read the same from either side', () => {
+  it('offers the way back from an alternate to its default form', async () => {
+    const parsed = await load('SFNS.ttf')
+    const a = parsed.cmap.get(0x61)!
+    const [forward] = findFeatureAlternates(parsed.otFont, a)
+    expect(forward).toBeDefined()
+
+    // The font declares `a -> a.1` and nothing in the other direction, so
+    // reading the substitution one way left the alternate itself with no
+    // variants at all: the same font answering the same question about the
+    // same pair of glyphs differently depending on which one was selected.
+    const back = findFeatureAlternates(parsed.otFont, forward.target)
+    expect(back.map((edge) => edge.target)).toContain(a)
+
+    const variants = suggestVariants(parsed, {}, forward.target)
+    expect(variants.length).toBeGreaterThan(0)
+    expect(variants.map((v) => v.glyphIndex)).toContain(a)
+  })
+
+  it('keeps every feature that reaches one drawing', async () => {
+    const parsed = await load('SFNS.ttf')
+    const [edge] = findFeatureAlternates(parsed.otFont, parsed.cmap.get(0x61)!)
+
+    expect(edge.tags).toEqual(['cv07', 'ss07'])
+  })
+
+  it('names the direction of the substitution', async () => {
+    const parsed = await load('SFNS.ttf')
+    const a = parsed.cmap.get(0x61)!
+    const [edge] = findFeatureAlternates(parsed.otFont, a)
+
+    expect(edge.forward).toBe(true)
+    expect(findFeatureAlternates(parsed.otFont, edge.target)[0].forward).toBe(false)
   })
 })

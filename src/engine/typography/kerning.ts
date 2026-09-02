@@ -49,11 +49,31 @@ function glyphIndexFor(parsed: ParsedFont, char: string): number | null {
   return codepoint === undefined ? null : (parsed.cmap.get(codepoint) ?? null)
 }
 
+/**
+ * The font's own kerning for a pair.
+ *
+ * Read from `kerningPairs` first, and only then from `getKerningValue`.
+ * That order matters. `getKerningValue` resolves GPOS through
+ * `getKerningTables(script, language)`, which asks for one script and one
+ * language and returns nothing when the font files its kerning under a tag
+ * the caller did not guess -- so a face whose pairs live under `latn` while
+ * the default lookup asks for `DFLT` reports every pair as zero. Arial
+ * Black is exactly that font: 392 non-zero pairs in `kerningPairs`, and
+ * `getKerningValue` answers 0 for every one of them, including AV at -113.
+ *
+ * `kerningPairs` is built once at parse time from whichever table the font
+ * actually uses -- legacy `kern` or GPOS -- so it does not depend on
+ * guessing a script tag. `getKerningValue` is kept as the fallback for the
+ * fonts whose pairs it does reach.
+ */
 export function originalKerning(
   parsed: ParsedFont,
   left: number,
   right: number,
 ): number {
+  const direct = parsed.otFont.kerningPairs?.[pairKey(left, right)]
+  if (typeof direct === 'number' && Number.isFinite(direct)) return direct
+
   try {
     const value = parsed.otFont.getKerningValue(left, right)
     return Number.isFinite(value) ? value : 0

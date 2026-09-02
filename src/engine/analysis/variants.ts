@@ -51,6 +51,8 @@ export interface GlyphVariant {
   source: VariantSource
   /** GSUB feature that offers this alternate, when that is the source. */
   featureTag?: string
+  /** Every feature that reaches this alternate; a font may file one under several. */
+  featureTags?: string[]
   /** The glyph in this font that supplies the shape. */
   glyphIndex: number
   glyphName: string
@@ -93,12 +95,50 @@ function hasComparableProportions(
   return ratio > 0.7 && ratio < 1.45
 }
 
-/** Alternate glyph indices this font offers for `glyphIndex`, by feature. */
-export function findFeatureAlternates(
-  font: OTFont,
-  glyphIndex: number,
-): Array<{ tag: string; target: number }> {
-  const results: Array<{ tag: string; target: number }> = []
+/**
+ * Every substitution the font's variant features declare, as an undirected
+ * graph over glyph indices.
+ *
+ * Undirected is the whole point. A face maps `a -> a.1` under `cv07`, and
+ * nothing maps back, so scanning only forwards means the default `a` offers
+ * its alternate while the alternate itself offers nothing at all -- the same
+ * font answering the same question differently depending on which of the two
+ * glyphs you happen to be looking at. Reading the edge both ways also gives
+ * siblings for free: when `a -> a.1` and `a -> a.2` are both declared, all
+ * three are forms of one letter and each should offer the other two.
+ *
+ * Every tag that declares an edge is kept, because `cv07` and `ss07` reaching
+ * the same glyph is worth saying once with both names rather than twice.
+ */
+interface AlternateEdge {
+  target: number
+  tags: string[]
+  /** True when the font substitutes *away* from the glyph being asked about. */
+  forward: boolean
+}
+
+type AlternateGraph = Map<number, Map<number, { tags: Set<string>; forward: boolean }>>
+
+const GRAPH_CACHE = new WeakMap<OTFont, AlternateGraph>()
+
+function buildAlternateGraph(font: OTFont): AlternateGraph {
+  const graph: AlternateGraph = new Map()
+
+  const link = (from: number, to: number, tag: string, forward: boolean): void => {
+    if (from === to) return
+    let edges = graph.get(from)
+    if (!edges) graph.set(from, (edges = new Map()))
+    const existing = edges.get(to)
+    if (existing) {
+      existing.tags.add(tag)
+      // A pair joined in both directions is described as a substitution the
+      // font offers, not as a way back to the default.
+      existing.forward = existing.forward || forward
+    } else {
+      edges.set(to, { tags: new Set([tag]), forward })
+    }
+  }
+
   const tags = [
     ...new Set(
       ((font.tables.gsub?.features ?? []) as Array<{ tag?: string }>)
@@ -109,22 +149,81 @@ export function findFeatureAlternates(
 
   for (const tag of tags) {
     try {
-      const singles = font.substitution.getSingle(tag) ?? []
-      for (const entry of singles) {
-        if (entry.sub === glyphIndex && typeof entry.by === 'number') {
-          results.push({ tag, target: entry.by })
-        }
+      for (const entry of font.substitution.getSingle(tag) ?? []) {
+        if (typeof entry.sub !== 'number' || typeof entry.by !== 'number') continue
+        link(entry.sub, entry.by, tag, true)
+        link(entry.by, entry.sub, tag, false)
       }
-      const alternates = font.substitution.getAlternates(tag) ?? []
-      for (const entry of alternates) {
-        if (entry.sub !== glyphIndex || !Array.isArray(entry.by)) continue
-        for (const target of entry.by) results.push({ tag, target })
+      for (const entry of font.substitution.getAlternates(tag) ?? []) {
+        if (typeof entry.sub !== 'number' || !Array.isArray(entry.by)) continue
+        for (const target of entry.by) {
+          if (typeof target !== 'number') continue
+          link(entry.sub, target, tag, true)
+          link(target, entry.sub, tag, false)
+        }
+        // Alternates listed together under one feature are forms of the same
+        // letter, so they are siblings of each other too.
+        for (const a of entry.by) {
+          for (const b of entry.by) {
+            if (typeof a !== 'number' || typeof b !== 'number') continue
+            link(a, b, tag, false)
+          }
+        }
       }
     } catch {
       // A feature we cannot read is simply not offered.
     }
   }
-  return results
+
+  return graph
+}
+
+function alternateGraph(font: OTFont): AlternateGraph {
+  let cached = GRAPH_CACHE.get(font)
+  if (!cached) {
+    cached = buildAlternateGraph(font)
+    GRAPH_CACHE.set(font, cached)
+  }
+  return cached
+}
+
+/**
+ * Alternate glyphs this font offers for `glyphIndex`.
+ *
+ * Siblings one step away are included: from `a.1` that reaches the default
+ * `a`, and from there any other alternate the same features declare. The
+ * walk stops at two steps, because a glyph three substitutions away is no
+ * longer reliably the same letter.
+ */
+export function findFeatureAlternates(
+  font: OTFont,
+  glyphIndex: number,
+): AlternateEdge[] {
+  const graph = alternateGraph(font)
+  const found = new Map<number, { tags: Set<string>; forward: boolean }>()
+
+  const direct = graph.get(glyphIndex)
+  if (!direct) return []
+
+  for (const [target, edge] of direct) {
+    found.set(target, { tags: new Set(edge.tags), forward: edge.forward })
+  }
+
+  // One more step, to pick up siblings that share a default form.
+  for (const [neighbour] of direct) {
+    for (const [target, edge] of graph.get(neighbour) ?? []) {
+      if (target === glyphIndex || found.has(target)) continue
+      found.set(target, { tags: new Set(edge.tags), forward: false })
+    }
+  }
+
+  return [...found]
+    .map(([target, edge]) => ({
+      target,
+      tags: [...edge.tags].sort(),
+      forward: edge.forward,
+    }))
+    .sort((a, b) => a.target - b.target)
 }
 
 /**
@@ -279,6 +378,7 @@ export function suggestVariants(
       detail: string
       source: VariantSource
       featureTag?: string
+      featureTags?: string[]
     },
   ): void => {
     if (seen.has(targetIndex)) return
@@ -316,7 +416,10 @@ export function suggestVariants(
     })
   }
 
-  for (const { tag, target } of findFeatureAlternates(parsed.otFont, glyphIndex)) {
+  for (const { target, tags, forward } of findFeatureAlternates(
+    parsed.otFont,
+    glyphIndex,
+  )) {
     const targetStructure = analyzeGlyphStructure(
       resolveGlyph(parsed, {}, target).outline,
       { char },
@@ -329,12 +432,21 @@ export function suggestVariants(
         ? `${constructionLabel(targetStructure.construction)} ${char ?? source.name}`
         : null
 
+    // Both names are worth giving when a font files one drawing under a
+    // stylistic set and a character variant at once.
+    const named = tags.map(describeFeature).join(' · ')
+    const codes = tags.map((tag) => tag.toUpperCase()).join(', ')
+    const detail = forward
+      ? `Offered by this font as ${codes} · ${named}`
+      : `The form this font substitutes under ${codes} · ${named}`
+
     add(target, {
-      id: `feature-${tag}-${target}`,
-      label: structural ?? describeFeature(tag),
-      detail: `Offered by this font as ${tag.toUpperCase()} · ${describeFeature(tag)}`,
+      id: `feature-${tags.join('-')}-${target}`,
+      label: structural ?? named,
+      detail,
       source: VARIANT_SOURCE.Feature,
-      featureTag: tag,
+      featureTag: tags[0],
+      featureTags: tags,
     })
   }
 
@@ -376,11 +488,20 @@ export function analyzeVariants(
       (parsed.otFont.tables.gsub?.features ?? []) as Array<{ tag?: string }>
     ).some((entry) => typeof entry.tag === 'string' && isVariantFeature(entry.tag))
 
+    // Saying only "nothing here" leaves the question unanswered. Another
+    // drawing of this letter almost certainly exists -- in another typeface --
+    // and that panel is the honest place to find one, so the dead end points
+    // at it rather than stopping.
+    const elsewhere =
+      ' Other typefaces in your library may draw it differently — see “Other typefaces”.'
+
     emptyReason = current.isEmpty
       ? 'This glyph has no outline to compare.'
       : hasAnyVariantFeature
-        ? 'This font declares alternate features, but none of them offer another form of this glyph.'
-        : 'This font ships no alternate letterforms for this glyph. Redrawing it in another construction is a design decision, so nothing is suggested rather than inventing a shape.'
+        ? 'This font declares alternate features, but none of them offer another form of this glyph.' +
+          elsewhere
+        : 'This font ships no alternate letterforms for this glyph. Redrawing it in another construction is a design decision, so nothing is suggested rather than inventing a shape.' +
+          elsewhere
   }
 
   return { structure, variants, emptyReason }

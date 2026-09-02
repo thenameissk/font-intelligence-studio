@@ -71,7 +71,7 @@ export function GlyphEditorView() {
           <div className="min-h-0 flex-1">
             <GlyphCanvas parsed={parsed} glyph={glyph} dna={dna} />
           </div>
-          <CompareStrip parsed={parsed} />
+          <CompareStrip parsed={parsed} dna={dna} />
         </div>
       </div>
     </div>

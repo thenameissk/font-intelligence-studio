@@ -11,6 +11,7 @@
  * UI says so rather than pretending otherwise.
  */
 import type { GlyphEdits } from '@/types/font'
+import { effectiveKerning } from './kerning'
 import type { ParsedFont } from '@/engine/parser/parseFont'
 import { resolveAdvanceWidth } from '@/engine/parser/glyphAccess'
 
@@ -99,20 +100,9 @@ function shape(
   return result
 }
 
-function kerningBetween(
-  parsed: ParsedFont,
-  kerningEdits: Readonly<Record<string, number>>,
-  left: number,
-  right: number,
-): number {
-  const override = kerningEdits[`${left},${right}`]
-  if (override !== undefined) return override
-  try {
-    return parsed.otFont.getKerningValue(left, right)
-  } catch {
-    return 0
-  }
-}
+// Kerning goes through the same reader the kerning editor uses, so running
+// text and the pair list can never disagree about what the font says.
+const kerningBetween = effectiveKerning
 
 export function layoutText(
   parsed: ParsedFont,
