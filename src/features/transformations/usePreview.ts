@@ -53,6 +53,27 @@ export function usePreviewedGlyphs(
   }, [parsed, indices, edits, spec, targets, scope])
 }
 
+/**
+ * The same glyphs without the pending transformation.
+ *
+ * Anything that *applies* the pending spec must start from these. Applying
+ * it to the previewed glyphs instead transforms an already-transformed
+ * shape, so asking for half height produced a quarter.
+ */
+export function useBaseGlyphs(
+  parsed: ParsedFont | null,
+  indices: readonly number[],
+): ResolvedGlyph[] {
+  const edits = useFontStore((s) => s.edits)
+  return useMemo(
+    () =>
+      parsed === null
+        ? []
+        : indices.map((index) => resolveGlyph(parsed, edits, index)),
+    [parsed, indices, edits],
+  )
+}
+
 export function usePreviewedGlyph(
   parsed: ParsedFont | null,
   index: number | null,

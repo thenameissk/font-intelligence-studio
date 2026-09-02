@@ -18,6 +18,18 @@ import {
 } from '@/engine/geometry/transform'
 import { outlineBounds } from '@/engine/geometry/outline'
 
+/**
+ * The point a scale or rotation is performed about.
+ *
+ * Two of these are typographic and the rest are geometric. `baseline` is the
+ * font origin -- x = 0 on the baseline -- which is the only origin that
+ * keeps a letter registered with the rest of the alphabet, and
+ * `center-baseline` is the usual choice for making a letter wider without
+ * lifting it off the line. The nine-point grid is the reference-point widget
+ * every vector editor offers, anchored on the glyph's ink rather than on the
+ * em square, and it is what you want when the shape is being manipulated as
+ * a shape.
+ */
 export const ORIGIN_MODE = {
   /** The font origin: x = 0 on the baseline. */
   Baseline: 'baseline',
@@ -25,18 +37,49 @@ export const ORIGIN_MODE = {
   Center: 'center',
   /** Centre horizontally, baseline vertically -- the usual choice. */
   CenterBaseline: 'center-baseline',
+
+  TopLeft: 'top-left',
+  TopCenter: 'top-center',
+  TopRight: 'top-right',
+  MiddleLeft: 'middle-left',
+  MiddleRight: 'middle-right',
+  BottomLeft: 'bottom-left',
+  BottomCenter: 'bottom-center',
+  BottomRight: 'bottom-right',
 } as const
 export type OriginMode = (typeof ORIGIN_MODE)[keyof typeof ORIGIN_MODE]
 
 export function resolveOrigin(bounds: Rect, mode: OriginMode): Point {
+  const left = bounds.xMin
+  const right = bounds.xMax
+  const middleX = (bounds.xMin + bounds.xMax) / 2
+  const bottom = bounds.yMin
+  const top = bounds.yMax
+  const middleY = (bounds.yMin + bounds.yMax) / 2
+
   switch (mode) {
     case ORIGIN_MODE.Center:
-      return {
-        x: (bounds.xMin + bounds.xMax) / 2,
-        y: (bounds.yMin + bounds.yMax) / 2,
-      }
+      return { x: middleX, y: middleY }
     case ORIGIN_MODE.CenterBaseline:
-      return { x: (bounds.xMin + bounds.xMax) / 2, y: 0 }
+      return { x: middleX, y: 0 }
+
+    case ORIGIN_MODE.TopLeft:
+      return { x: left, y: top }
+    case ORIGIN_MODE.TopCenter:
+      return { x: middleX, y: top }
+    case ORIGIN_MODE.TopRight:
+      return { x: right, y: top }
+    case ORIGIN_MODE.MiddleLeft:
+      return { x: left, y: middleY }
+    case ORIGIN_MODE.MiddleRight:
+      return { x: right, y: middleY }
+    case ORIGIN_MODE.BottomLeft:
+      return { x: left, y: bottom }
+    case ORIGIN_MODE.BottomCenter:
+      return { x: middleX, y: bottom }
+    case ORIGIN_MODE.BottomRight:
+      return { x: right, y: bottom }
+
     default:
       return { x: 0, y: 0 }
   }

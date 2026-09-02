@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Check, RotateCcw, X } from 'lucide-react'
+import { Check, Repeat, RotateCcw, X } from 'lucide-react'
 import type { ResolvedGlyph, VerticalMetrics } from '@/types/font'
 import {
   applyTransformSpec,
@@ -7,6 +7,7 @@ import {
   specIsIdentity,
   type TransformSpec,
 } from '@/engine/transforms/applySpec'
+import { ORIGIN_MODE, type OriginMode } from '@/engine/transforms/glyphTransforms'
 import { findCorners } from '@/engine/transforms/roundCorners'
 import { offsetIsRisky } from '@/engine/transforms/offset'
 import { measureVerticalStem } from '@/engine/analysis/measure'
@@ -58,11 +59,14 @@ export function TransformPanel({
   metrics?: VerticalMetrics
 }) {
   const [tab, setTab] = useState<Tab>('transform')
+  const [origin, setOrigin] = useState<OriginMode>(ORIGIN_MODE.CenterBaseline)
   const spec = useTransformStore((s) => s.spec)
   const setSpec = useTransformStore((s) => s.setSpec)
   const scope = useTransformStore((s) => s.scope)
   const setScope = useTransformStore((s) => s.setScope)
   const clear = useTransformStore((s) => s.clear)
+  const lastApplied = useTransformStore((s) => s.lastApplied)
+  const rememberApplied = useTransformStore((s) => s.rememberApplied)
   const commit = useHistoryStore((s) => s.commit)
 
   const targets = useMemo(() => glyphs.map((g) => g.index), [glyphs])
@@ -73,13 +77,18 @@ export function TransformPanel({
 
   const update = (next: TransformSpec): void => setSpec(next, targets)
 
-  const apply = (): void => {
-    if (!spec) return
-    const changes = applyTransformSpec(glyphs, spec, scope)
+  const applySpec = (target: TransformSpec): void => {
+    const changes = applyTransformSpec(glyphs, target, scope)
     if (Object.keys(changes).length > 0) {
-      commit(describeSpec(spec), changes)
+      commit(describeSpec(target), changes)
+      rememberApplied(target)
     }
     clear()
+  }
+
+  const apply = (): void => {
+    if (!spec) return
+    applySpec(spec)
   }
 
   if (glyphs.length === 0) return null
@@ -115,11 +124,29 @@ export function TransformPanel({
         ))}
       </div>
 
-      {tab === 'transform' && <TransformTab spec={spec} update={update} />}
+      {tab === 'transform' && (
+        <TransformTab
+          spec={spec}
+          update={update}
+          origin={origin}
+          setOrigin={setOrigin}
+        />
+      )}
       {tab === 'shape' && (
         <ShapeTab spec={spec} update={update} glyphs={glyphs} />
       )}
       {tab === 'spacing' && <SpacingTab update={update} />}
+
+      {!spec && lastApplied && (
+        <button
+          type="button"
+          onClick={() => applySpec(lastApplied)}
+          className="mt-2 flex w-full items-center gap-1.5 rounded border border-line px-2 py-1 text-left text-[10px] text-ink-muted transition-colors hover:bg-hover hover:text-ink"
+        >
+          <Repeat size={11} className="shrink-0" />
+          <span className="truncate">Repeat {describeSpec(lastApplied)}</span>
+        </button>
+      )}
 
       {spec && (
         <div className="mt-3 rounded-md border border-accent/40 bg-accent-soft/40 p-2">
@@ -151,16 +178,127 @@ export function TransformPanel({
   )
 }
 
+/**
+ * The reference-point widget every vector editor has: the point the
+ * transformation holds still.
+ *
+ * Scaling a letter about the centre of its ink lifts it off the baseline,
+ * which is almost never what a type designer wants, so the baseline row is
+ * offered as its own choice rather than being approximated by the bottom of
+ * the ink box -- those are different points on any letter with a descender.
+ */
+const ORIGIN_GRID: ReadonlyArray<readonly [OriginMode, string]> = [
+  [ORIGIN_MODE.TopLeft, 'Top left'],
+  [ORIGIN_MODE.TopCenter, 'Top centre'],
+  [ORIGIN_MODE.TopRight, 'Top right'],
+  [ORIGIN_MODE.MiddleLeft, 'Middle left'],
+  [ORIGIN_MODE.Center, 'Centre of the ink'],
+  [ORIGIN_MODE.MiddleRight, 'Middle right'],
+  [ORIGIN_MODE.BottomLeft, 'Bottom left'],
+  [ORIGIN_MODE.BottomCenter, 'Bottom centre'],
+  [ORIGIN_MODE.BottomRight, 'Bottom right'],
+]
+
+function OriginPicker({
+  origin,
+  onChange,
+}: {
+  origin: OriginMode
+  onChange: (origin: OriginMode) => void
+}) {
+  return (
+    <div className="mb-2 flex items-center gap-2">
+      <div className="grid grid-cols-3 gap-px rounded border border-line bg-line p-px">
+        {ORIGIN_GRID.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            title={`Transform about the ${label.toLowerCase()}`}
+            aria-label={label}
+            aria-pressed={origin === value}
+            onClick={() => onChange(value)}
+            className={cn(
+              'flex h-3.5 w-3.5 items-center justify-center bg-input transition-colors hover:bg-hover',
+              origin === value && 'bg-accent',
+            )}
+          >
+            <span
+              className={cn(
+                'h-1 w-1 rounded-full',
+                origin === value ? 'bg-on-accent' : 'bg-ink-faint',
+              )}
+            />
+          </button>
+        ))}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="flex gap-1">
+          {(
+            [
+              [ORIGIN_MODE.CenterBaseline, 'Baseline'],
+              [ORIGIN_MODE.Baseline, 'Origin'],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              title={
+                value === ORIGIN_MODE.Baseline
+                  ? 'x = 0 on the baseline: the font origin'
+                  : 'Centred horizontally, on the baseline vertically'
+              }
+              onClick={() => onChange(value)}
+              className={cn(
+                'rounded px-1.5 py-0.5 text-[10px] transition-colors',
+                origin === value
+                  ? 'bg-elevated text-ink'
+                  : 'text-ink-faint hover:text-ink',
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <p className="mt-0.5 truncate text-[10px] text-ink-faint">
+          Holds the {describeOrigin(origin)} still
+        </p>
+      </div>
+    </div>
+  )
+}
+
+function describeOrigin(origin: OriginMode): string {
+  if (origin === ORIGIN_MODE.Baseline) return 'font origin'
+  if (origin === ORIGIN_MODE.CenterBaseline) return 'baseline centre'
+  return (
+    ORIGIN_GRID.find(([value]) => value === origin)?.[1].toLowerCase() ??
+    'origin'
+  )
+}
+
 function TransformTab({
   spec,
   update,
+  origin,
+  setOrigin,
 }: {
   spec: TransformSpec | null
   update: (spec: TransformSpec) => void
+  origin: OriginMode
+  setOrigin: (origin: OriginMode) => void
 }) {
   const scale = spec?.kind === 'scale' ? spec : null
   const slant = spec?.kind === 'slant' ? spec : null
   const move = spec?.kind === 'move' ? spec : null
+  const rotate = spec?.kind === 'rotate' ? spec : null
+
+  // Changing the reference point re-previews the pending transformation
+  // about the new point rather than silently applying to the next one.
+  const changeOrigin = (next: OriginMode): void => {
+    setOrigin(next)
+    if (spec?.kind === 'scale') update({ ...spec, origin: next })
+    if (spec?.kind === 'rotate') update({ ...spec, origin: next })
+  }
 
   return (
     <div className="space-y-1">
@@ -176,6 +314,8 @@ function TransformTab({
         ))}
       </div>
 
+      <OriginPicker origin={origin} onChange={changeOrigin} />
+
       <Row label="Width">
         <NumberInput
           ariaLabel="Scale width percent"
@@ -188,7 +328,7 @@ function TransformTab({
               kind: 'scale',
               sx: value / 100,
               sy: scale?.sy ?? 1,
-              origin: 'baseline',
+              origin,
               scaleAdvance: true,
             })
           }
@@ -206,10 +346,20 @@ function TransformTab({
               kind: 'scale',
               sx: scale?.sx ?? 1,
               sy: value / 100,
-              origin: 'baseline',
+              origin,
               scaleAdvance: true,
             })
           }
+        />
+      </Row>
+      <Row label="Rotate">
+        <NumberInput
+          ariaLabel="Rotate degrees"
+          value={rotate?.degrees ?? 0}
+          precision={1}
+          step={0.5}
+          suffix="°"
+          onChange={(value) => update({ kind: 'rotate', degrees: value, origin })}
         />
       </Row>
       <Row label="Slant">

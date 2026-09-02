@@ -4,7 +4,7 @@ import type { ParsedFont } from '@/engine/parser/parseFont'
 import { FontOverview } from '@/features/analyzer/FontOverview'
 import { GlyphEditorView } from '@/features/glyph-editor/GlyphEditorView'
 import { Inspector } from '@/features/glyph-editor/Inspector'
-import { usePreviewedGlyphs } from '@/features/transformations/usePreview'
+import { useBaseGlyphs, usePreviewedGlyphs } from '@/features/transformations/usePreview'
 import { TransformPanel } from '@/features/transformations/TransformPanel'
 import { RelatedGlyphsPanel } from '@/features/transformations/RelatedGlyphsPanel'
 import { PathOpsPanel } from '@/features/glyph-editor/PathOpsPanel'
@@ -72,6 +72,9 @@ export function WorkspaceCenter({ parsed }: { parsed: ParsedFont }) {
 export function WorkspaceInspector({ parsed }: { parsed: ParsedFont }) {
   const selected = useEditorStore((s) => s.selectedGlyphs)
   const glyphs = usePreviewedGlyphs(parsed, selected)
+  // The transform panel applies the pending spec, so it must start from the
+  // untransformed glyphs rather than from the preview of itself.
+  const baseGlyphs = useBaseGlyphs(parsed, selected)
   const primary = glyphs.length > 0 ? glyphs[glyphs.length - 1] : null
 
   return (
@@ -98,7 +101,7 @@ export function WorkspaceInspector({ parsed }: { parsed: ParsedFont }) {
       )}
       <TransformPanel
         metrics={parsed.verticalMetrics}
-        glyphs={glyphs}
+        glyphs={baseGlyphs}
         label={
           selected.length > 1
             ? `${selected.length} glyphs`

@@ -178,7 +178,10 @@ function VariantCard({
             {variant.source === 'feature' ? (
               <>
                 <span className="font-mono text-accent">
-                  {variant.featureTag?.toUpperCase()}
+                  {(variant.featureTags ?? [variant.featureTag])
+                    .filter(Boolean)
+                    .map((tag) => tag!.toUpperCase())
+                    .join(' · ')}
                 </span>{' '}
                 · from this font
               </>
