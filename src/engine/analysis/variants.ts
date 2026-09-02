@@ -68,12 +68,28 @@ export interface GlyphVariant {
  * single glyph, so they are left out.
  */
 function isVariantFeature(tag: string): boolean {
-  // `ordn`, `sups` and `subs` substitute a differently-sized glyph for a
-  // different purpose rather than offering another drawing of this letter,
-  // so they are not variants in the sense this panel means.
+  // `ordn`, `sups`, `subs`, `numr`, `dnom` and `frac` substitute a
+  // differently-sized glyph for a different purpose rather than offering
+  // another drawing of this letter, so they are not variants in the sense
+  // this panel means.
   if (/^(salt|aalt|hist|swsh|titl|zero)$/.test(tag)) return true
   if (/^ss\d\d$/.test(tag)) return true
   if (/^cv\d\d$/.test(tag)) return true
+
+  // Figures have as many forms as letters do: oldstyle against lining,
+  // tabular against proportional. Each is a different drawing of the same
+  // digit, which is exactly what this panel is for.
+  if (/^(onum|lnum|tnum|pnum)$/.test(tag)) return true
+
+  // A localised form is the same character drawn the way a particular
+  // language expects it -- a real alternate, not a different letter.
+  if (tag === 'locl') return true
+
+  // Small caps are another drawing of the same letter. They survive the
+  // proportion check only when they are close enough in height to be
+  // offered honestly as an alternate rather than as a different size.
+  if (/^(smcp|c2sc|case)$/.test(tag)) return true
+
   return false
 }
 
@@ -190,10 +206,17 @@ function alternateGraph(font: OTFont): AlternateGraph {
 /**
  * Alternate glyphs this font offers for `glyphIndex`.
  *
- * Siblings one step away are included: from `a.1` that reaches the default
- * `a`, and from there any other alternate the same features declare. The
- * walk stops at two steps, because a glyph three substitutions away is no
- * longer reliably the same letter.
+ * Direct edges are the glyph's own alternates and, read the other way, the
+ * default form it was substituted from. Siblings are then added: two glyphs
+ * are alternates of each other when they share a default, which is how
+ * `a.1` comes to offer the small cap that `a` also points at.
+ *
+ * The sibling step deliberately walks backwards first and only then
+ * forwards. Walking forwards first and backwards second looks equivalent
+ * and is not: from `a` it reaches the small cap `A.sc` through `smcp`, and
+ * from there the capital `A` through `c2sc` -- offering a capital A as a
+ * variant of lowercase a. Requiring a shared default keeps every suggestion
+ * a form of the same character.
  */
 export function findFeatureAlternates(
   font: OTFont,
@@ -209,11 +232,14 @@ export function findFeatureAlternates(
     found.set(target, { tags: new Set(edge.tags), forward: edge.forward })
   }
 
-  // One more step, to pick up siblings that share a default form.
-  for (const [neighbour] of direct) {
-    for (const [target, edge] of graph.get(neighbour) ?? []) {
+  // A backward edge names a default this glyph was substituted from; that
+  // default's other alternates are this glyph's siblings.
+  for (const [neighbour, edge] of direct) {
+    if (edge.forward) continue
+    for (const [target, sibling] of graph.get(neighbour) ?? []) {
+      if (!sibling.forward) continue
       if (target === glyphIndex || found.has(target)) continue
-      found.set(target, { tags: new Set(edge.tags), forward: false })
+      found.set(target, { tags: new Set(sibling.tags), forward: false })
     }
   }
 
@@ -262,10 +288,31 @@ const STRUCTURAL_TWINS: Record<string, Array<{ codepoint: number; label: string;
   ],
 }
 
+const FEATURE_LABELS: Record<string, string> = {
+  smcp: 'Small capitals',
+  c2sc: 'Capitals as small capitals',
+  case: 'Case-sensitive form',
+  locl: 'Localised form',
+  onum: 'Oldstyle figure',
+  lnum: 'Lining figure',
+  tnum: 'Tabular figure',
+  pnum: 'Proportional figure',
+  salt: 'Stylistic alternate',
+  aalt: 'Access all alternates',
+  hist: 'Historical form',
+  swsh: 'Swash',
+  titl: 'Titling form',
+  zero: 'Slashed zero',
+}
+
 function describeFeature(tag: string): string {
   if (/^ss\d\d$/.test(tag)) return `Stylistic set ${tag.slice(2)}`
   if (/^cv\d\d$/.test(tag)) return `Character variant ${tag.slice(2)}`
-  return featureName(tag)
+  const known = FEATURE_LABELS[tag]
+  if (known) return known
+  const named = featureName(tag)
+  // Better the raw tag than the words "Unknown feature".
+  return named === 'Unknown feature' ? tag.toUpperCase() : named
 }
 
 /** Plain-language differences between the current glyph and a candidate. */
@@ -490,10 +537,9 @@ export function analyzeVariants(
 
     // Saying only "nothing here" leaves the question unanswered. Another
     // drawing of this letter almost certainly exists -- in another typeface --
-    // and that panel is the honest place to find one, so the dead end points
-    // at it rather than stopping.
-    const elsewhere =
-      ' Other typefaces in your library may draw it differently — see “Other typefaces”.'
+    // and the list of those sits directly below this message, so it points
+    // down rather than stopping.
+    const elsewhere = ' Other typefaces draw it differently, below.'
 
     emptyReason = current.isEmpty
       ? 'This glyph has no outline to compare.'

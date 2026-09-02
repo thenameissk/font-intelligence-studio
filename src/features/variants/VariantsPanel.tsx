@@ -52,7 +52,7 @@ export function VariantsPanel({
     <>
       <PanelSection
         title="Variants"
-        defaultOpen={report.variants.length > 0}
+        defaultOpen
         actions={
           report.variants.length > 0 ? (
             <span className="rounded-sm bg-accent-soft px-1 py-px font-mono text-[10px] text-accent">
@@ -111,9 +111,15 @@ export function VariantsPanel({
             ))}
           </ul>
         )}
-      </PanelSection>
 
-      <PanelSection title="Other typefaces" defaultOpen={false}>
+        {/* Most faces ship no alternates at all -- Georgia, Verdana, Trebuchet
+            and STIX expose none between them -- so for nearly every glyph the
+            only real answer to "what else could this be" comes from other
+            typefaces. Keeping it behind a collapsed panel below a dead end
+            made the whole question look unanswerable. */}
+        <p className="mt-3 mb-1.5 text-2xs font-semibold tracking-wide text-ink-muted uppercase">
+          In other typefaces
+        </p>
         <VariantGrid
           parsed={parsed}
           glyph={glyph}

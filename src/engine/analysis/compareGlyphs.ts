@@ -11,9 +11,21 @@
  * pending edits rather than what the font shipped with.
  */
 import type { Outline } from '@/types/geometry'
-import type { ResolvedGlyph, VerticalMetrics } from '@/types/font'
+import type { VerticalMetrics } from '@/types/font'
 import { countNodes, outlineBounds } from '@/engine/geometry/outline'
 import { measureHorizontalStroke, measureVerticalStem } from './measure'
+
+/**
+ * The least a thing needs to be measurable.
+ *
+ * A variant offered by the font is an outline and an advance width, not a
+ * resolved glyph, and so is a specimen borrowed from another typeface.
+ * Measuring takes the shape, so that is all this asks for.
+ */
+export interface Measurable {
+  outline: Outline
+  advanceWidth: number
+}
 
 export interface GlyphMeasurements {
   advanceWidth: number
@@ -103,7 +115,7 @@ function referenceTop(bounds: { yMax: number }, references: readonly number[]): 
 }
 
 export function measureGlyph(
-  glyph: ResolvedGlyph,
+  glyph: Measurable,
   metrics: VerticalMetrics,
   references: readonly number[] = defaultReferences(metrics),
 ): GlyphMeasurements {
@@ -125,8 +137,10 @@ export function measureGlyph(
 
   return {
     advanceWidth: glyph.advanceWidth,
-    leftSideBearing: glyph.leftSideBearing,
-    rightSideBearing: glyph.rightSideBearing,
+    // Derived rather than read, so a bare outline measures the same as a
+    // resolved glyph does.
+    leftSideBearing: bounds.xMin,
+    rightSideBearing: glyph.advanceWidth - bounds.xMax,
     width: bounds.xMax - bounds.xMin,
     height: bounds.yMax - bounds.yMin,
     yMin: bounds.yMin,
@@ -151,8 +165,8 @@ function isMatched(a: number, b: number, upm: number): boolean {
 }
 
 export function compareGlyphs(
-  a: ResolvedGlyph,
-  b: ResolvedGlyph,
+  a: Measurable,
+  b: Measurable,
   metrics: VerticalMetrics,
   references: readonly number[] = defaultReferences(metrics),
 ): { a: GlyphMeasurements; b: GlyphMeasurements; rows: MeasurementRow[] } {
@@ -222,8 +236,8 @@ export type Alignment = (typeof ALIGNMENT)[keyof typeof ALIGNMENT]
  * viewer's rather than one baked in here.
  */
 export function overlayOffset(
-  a: ResolvedGlyph,
-  b: ResolvedGlyph,
+  a: Measurable,
+  b: Measurable,
   alignment: Alignment,
 ): number {
   if (alignment === ALIGNMENT.Origin) return 0

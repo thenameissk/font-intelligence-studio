@@ -8,7 +8,9 @@ import {
   type GlyphStructure,
 } from '@/engine/analysis/glyphStructure'
 import { Button } from '@/components/ui/Button'
+import { useFontDna } from '@/features/analyzer/useFontDna'
 import { VariantComparison } from './VariantComparison'
+import { VariantMeasurements } from './VariantMeasurements'
 
 /** The full-size annotated comparison. */
 export function VariantCompareDialog({
@@ -26,6 +28,8 @@ export function VariantCompareDialog({
   onApply: () => void
   onClose: () => void
 }) {
+  const dna = useFontDna()
+
   const caption = (value: GlyphStructure['construction'], fallback: string): string =>
     value === CONSTRUCTION.Unknown ? fallback : constructionLabel(value)
 
@@ -79,6 +83,23 @@ export function VariantCompareDialog({
               ))}
             </dl>
           )}
+
+          <div className="mt-6 border-t border-line pt-4">
+            <VariantMeasurements
+              current={{
+                outline: glyph.outline,
+                advanceWidth: glyph.advanceWidth,
+              }}
+              variant={{
+                outline: variant.outline,
+                advanceWidth: variant.advanceWidth,
+              }}
+              metrics={parsed.verticalMetrics}
+              dna={dna}
+              currentLabel={caption(structure.construction, 'Current')}
+              variantLabel={caption(variant.structure.construction, variant.label)}
+            />
+          </div>
         </div>
 
         <footer className="flex h-12 shrink-0 items-center gap-2 border-t border-line px-3">

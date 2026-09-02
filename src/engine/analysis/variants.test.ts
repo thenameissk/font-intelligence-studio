@@ -155,7 +155,9 @@ describeIf('SFNS.ttf')('alternates read the same from either side', () => {
   it('offers the way back from an alternate to its default form', async () => {
     const parsed = await load('SFNS.ttf')
     const a = parsed.cmap.get(0x61)!
-    const [forward] = findFeatureAlternates(parsed.otFont, a)
+    const forward = findFeatureAlternates(parsed.otFont, a).find(
+      (edge) => parsed.glyphs[edge.target]?.name === 'a.1',
+    )!
     expect(forward).toBeDefined()
 
     // The font declares `a -> a.1` and nothing in the other direction, so
@@ -172,17 +174,50 @@ describeIf('SFNS.ttf')('alternates read the same from either side', () => {
 
   it('keeps every feature that reaches one drawing', async () => {
     const parsed = await load('SFNS.ttf')
-    const [edge] = findFeatureAlternates(parsed.otFont, parsed.cmap.get(0x61)!)
+    const edges = findFeatureAlternates(parsed.otFont, parsed.cmap.get(0x61)!)
+    const oneStorey = edges.find((edge) =>
+      parsed.glyphs[edge.target]?.name === 'a.1',
+    )!
 
-    expect(edge.tags).toEqual(['cv07', 'ss07'])
+    expect(oneStorey.tags).toEqual(['cv07', 'ss07'])
+  })
+
+  it('never offers a different letter as a form of this one', async () => {
+    const parsed = await load('SFNS.ttf')
+    const a = parsed.cmap.get(0x61)!
+    const A = parsed.cmap.get(0x41)!
+
+    // SF maps `a -> A.sc` under smcp and `A -> A.sc` under c2sc. Walking the
+    // graph forwards and then backwards steps from the lowercase a through
+    // the small cap and out into the capital, which is a different letter.
+    const targets = findFeatureAlternates(parsed.otFont, a).map((e) => e.target)
+    expect(targets).not.toContain(A)
+
+    expect(suggestVariants(parsed, {}, a).map((v) => v.glyphIndex)).not.toContain(A)
   })
 
   it('names the direction of the substitution', async () => {
     const parsed = await load('SFNS.ttf')
     const a = parsed.cmap.get(0x61)!
-    const [edge] = findFeatureAlternates(parsed.otFont, a)
+    const edge = findFeatureAlternates(parsed.otFont, a).find(
+      (candidate) => parsed.glyphs[candidate.target]?.name === 'a.1',
+    )!
 
     expect(edge.forward).toBe(true)
-    expect(findFeatureAlternates(parsed.otFont, edge.target)[0].forward).toBe(false)
+    const back = findFeatureAlternates(parsed.otFont, edge.target).find(
+      (candidate) => candidate.target === a,
+    )!
+    expect(back.forward).toBe(false)
+  })
+
+  it('offers figures their own alternate forms', async () => {
+    const parsed = await load('SFNS.ttf')
+    const one = parsed.cmap.get(0x31)!
+
+    // A digit has as many forms as a letter: SF ships an alternate one and a
+    // tabular one, and neither used to be offered at all.
+    const labels = suggestVariants(parsed, {}, one).map((v) => v.label)
+    expect(labels.length).toBeGreaterThan(0)
+    expect(labels.join(' ')).not.toContain('Unknown feature')
   })
 })
