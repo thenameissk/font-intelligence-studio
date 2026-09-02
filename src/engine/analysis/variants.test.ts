@@ -221,3 +221,52 @@ describeIf('SFNS.ttf')('alternates read the same from either side', () => {
     expect(labels.join(' ')).not.toContain('Unknown feature')
   })
 })
+
+describeIf('dev-OpenSans-Regular.ttf')('a font that has alternates, just not here', () => {
+  it('says the font has alternates rather than implying it has none', async () => {
+    const parsed = await load('dev-OpenSans-Regular.ttf')
+    const report = analyzeVariants(parsed, {}, parsed.cmap.get(0x61)!)
+
+    // Open Sans ships stylistic sets covering `g`, `I` and the figures, and
+    // nothing at all for `a`. Reporting that as though the font had no
+    // alternates is the difference between "there is no other a" and "this
+    // font is hiding one", and only one of those is true.
+    expect(report.variants).toHaveLength(0)
+    expect(report.alternatesElsewhere.count).toBeGreaterThan(50)
+    expect(report.alternatesElsewhere.examples).toContain('g')
+    expect(report.emptyReason).toContain('but none for this one')
+  })
+
+  it('names the candidate it turned down, and why', async () => {
+    const parsed = await load('dev-OpenSans-Regular.ttf')
+    const report = analyzeVariants(parsed, {}, parsed.cmap.get(0x61)!)
+
+    // `aalt` lists `a -> ordfeminine`. The feminine ordinal is a different
+    // character, not another drawing of a, and at 61% of the height it is
+    // caught by the proportion check -- but silently dropping it looks
+    // identical to finding nothing.
+    const ordinal = report.rejected.find((r) => r.glyphName === 'ordfeminine')
+    expect(ordinal).toBeDefined()
+    expect(ordinal!.reason).toContain('different character')
+  })
+
+  it('still finds the alternates the font really does ship', async () => {
+    const parsed = await load('dev-OpenSans-Regular.ttf')
+
+    // The single-storey g is a real stylistic alternate, under four tags.
+    const g = suggestVariants(parsed, {}, parsed.cmap.get(0x67)!)
+    expect(g.map((v) => v.label)).toContain('Single-storey g')
+
+    // Figures get their oldstyle and lining forms.
+    const one = suggestVariants(parsed, {}, parsed.cmap.get(0x31)!)
+    expect(one.length).toBeGreaterThan(0)
+  })
+
+  it('distinguishes a font with no alternates at all', async () => {
+    const arial = await load('ArialBlack.ttf')
+    const report = analyzeVariants(arial, {}, arial.cmap.get(0x61)!)
+
+    expect(report.alternatesElsewhere.count).toBe(0)
+    expect(report.emptyReason).toContain('no alternate letterforms at all')
+  })
+})

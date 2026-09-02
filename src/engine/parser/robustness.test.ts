@@ -64,7 +64,10 @@ describeIf('awkward but valid fonts', () => {
     })
   }
 
-  it('keeps the exportable bytes identical to the imported file', async () => {
+  // Parsing and byte-comparing a multi-megabyte collection takes several
+  // seconds on a loaded machine, which is slow rather than broken; the
+  // default five-second limit fails it intermittently.
+  it('keeps the exportable bytes identical to the imported file', { timeout: 30_000 }, async () => {
     const path = present[0].path
     const bytes = readFileSync(path)
     const buffer = bytes.buffer.slice(

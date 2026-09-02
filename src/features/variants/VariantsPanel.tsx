@@ -93,9 +93,35 @@ export function VariantsPanel({
           In this font
         </p>
         {report.variants.length === 0 ? (
-          <p className="rounded border border-line bg-input px-2 py-1.5 text-[11px] leading-relaxed text-ink-muted">
-            {report.emptyReason}
-          </p>
+          <div className="rounded border border-line bg-input px-2 py-1.5">
+            <p className="text-[11px] leading-relaxed text-ink-muted">
+              {report.emptyReason}
+            </p>
+
+            {/* Naming the letters that do have alternates answers the question
+                the bare message leaves open: whether the font has none, or
+                has them and simply not for this glyph. */}
+            {report.alternatesElsewhere.examples.length > 0 && (
+              <p className="mt-1 text-[11px] leading-relaxed text-ink-faint">
+                It does offer them for{' '}
+                <span className="font-mono text-ink-muted">
+                  {report.alternatesElsewhere.examples.join(' ')}
+                </span>
+                {report.alternatesElsewhere.count >
+                  report.alternatesElsewhere.examples.length && ' and others'}
+                .
+              </p>
+            )}
+
+            {report.rejected.map((candidate) => (
+              <p
+                key={candidate.glyphName}
+                className="mt-1 text-[11px] leading-relaxed text-ink-faint"
+              >
+                Not offered: {candidate.reason}.
+              </p>
+            ))}
+          </div>
         ) : (
           <ul className="space-y-1.5">
             {report.variants.map((variant) => (

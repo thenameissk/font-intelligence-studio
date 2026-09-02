@@ -399,14 +399,29 @@ export interface SuggestOptions {
   skipIdentical?: boolean
 }
 
+/** A candidate the font offered that is not honestly a form of this letter. */
+export interface RejectedVariant {
+  glyphName: string
+  reason: string
+}
+
 export function suggestVariants(
   parsed: ParsedFont,
   edits: GlyphEdits,
   glyphIndex: number,
   options: SuggestOptions = {},
 ): GlyphVariant[] {
+  return collectVariants(parsed, edits, glyphIndex, options).variants
+}
+
+function collectVariants(
+  parsed: ParsedFont,
+  edits: GlyphEdits,
+  glyphIndex: number,
+  options: SuggestOptions = {},
+): { variants: GlyphVariant[]; rejected: RejectedVariant[] } {
   const source = parsed.glyphs[glyphIndex]
-  if (!source) return []
+  if (!source) return { variants: [], rejected: [] }
 
   const current = resolveGlyph(parsed, edits, glyphIndex)
   const char =
@@ -416,6 +431,7 @@ export function suggestVariants(
 
   const seen = new Set<number>([glyphIndex])
   const variants: GlyphVariant[] = []
+  const rejected: RejectedVariant[] = []
 
   const add = (
     targetIndex: number,
@@ -433,7 +449,22 @@ export function suggestVariants(
 
     const candidate = resolveGlyph(parsed, {}, targetIndex)
     if (candidate.isEmpty) return
-    if (!hasComparableProportions(current, candidate)) return
+    if (!hasComparableProportions(current, candidate)) {
+      // Worth saying out loud. Open Sans lists `a -> ordfeminine` under
+      // aalt, and dropping it without a word looks identical to finding
+      // nothing at all -- which is the difference between "this font has no
+      // other a" and "this font is hiding one from you".
+      const height = candidate.bounds.yMax - candidate.bounds.yMin
+      const reference = current.bounds.yMax - current.bounds.yMin
+      rejected.push({
+        glyphName: candidate.name,
+        reason:
+          reference > 0 && height > 0
+            ? `${candidate.name} is ${Math.round((height / reference) * 100)}% of this letter's height, so it is a different character rather than another form of it`
+            : `${candidate.name} has no comparable outline`,
+      })
+      return
+    }
     seen.add(targetIndex)
 
     const structure = analyzeGlyphStructure(candidate.outline, { char })
@@ -508,7 +539,7 @@ export function suggestVariants(
     })
   }
 
-  return variants
+  return { variants, rejected }
 }
 
 export interface VariantReport {
@@ -516,6 +547,17 @@ export interface VariantReport {
   variants: GlyphVariant[]
   /** Why nothing was found, when nothing was. */
   emptyReason: string | null
+  /** Candidates the font offered that are not forms of this letter. */
+  rejected: RejectedVariant[]
+  /**
+   * Letters this font *does* give alternates for, when it gives none here.
+   *
+   * "This font has no other a" and "this font has alternates, just not for
+   * a" look identical when both say nothing, and they are very different
+   * facts. Open Sans ships a single-storey g and three stylistic sets, and
+   * none of them touch the a.
+   */
+  alternatesElsewhere: { count: number; examples: string[] }
 }
 
 export function analyzeVariants(
@@ -527,28 +569,61 @@ export function analyzeVariants(
   const char =
     current.unicode !== null ? String.fromCodePoint(current.unicode) : null
   const structure = analyzeGlyphStructure(current.outline, { char })
-  const variants = suggestVariants(parsed, edits, glyphIndex)
+  const { variants, rejected } = collectVariants(parsed, edits, glyphIndex)
 
   let emptyReason: string | null = null
-  if (variants.length === 0) {
-    const hasAnyVariantFeature = (
-      (parsed.otFont.tables.gsub?.features ?? []) as Array<{ tag?: string }>
-    ).some((entry) => typeof entry.tag === 'string' && isVariantFeature(entry.tag))
+  let alternatesElsewhere = { count: 0, examples: [] as string[] }
 
-    // Saying only "nothing here" leaves the question unanswered. Another
-    // drawing of this letter almost certainly exists -- in another typeface --
-    // and the list of those sits directly below this message, so it points
-    // down rather than stopping.
-    const elsewhere = ' Other typefaces draw it differently, below.'
+  if (variants.length === 0) {
+    alternatesElsewhere = summariseAlternates(parsed, glyphIndex)
 
     emptyReason = current.isEmpty
       ? 'This glyph has no outline to compare.'
-      : hasAnyVariantFeature
-        ? 'This font declares alternate features, but none of them offer another form of this glyph.' +
-          elsewhere
-        : 'This font ships no alternate letterforms for this glyph. Redrawing it in another construction is a design decision, so nothing is suggested rather than inventing a shape.' +
-          elsewhere
+      : alternatesElsewhere.count > 0
+        ? `This font ships alternates for ${alternatesElsewhere.count} other glyph${
+            alternatesElsewhere.count === 1 ? '' : 's'
+          }, but none for this one.`
+        : 'This font ships no alternate letterforms at all. Redrawing this letter in another construction is a design decision, so nothing is suggested rather than inventing a shape.'
   }
 
-  return { structure, variants, emptyReason }
+  return { structure, variants, emptyReason, rejected, alternatesElsewhere }
+}
+
+/**
+ * How many other glyphs this font gives alternates for, with a few named.
+ *
+ * Only glyphs the font substitutes *away from* are counted -- the defaults
+ * that have another form -- because counting the alternates as well would
+ * double every letter.
+ */
+function summariseAlternates(
+  parsed: ParsedFont,
+  exclude: number,
+): { count: number; examples: string[] } {
+  const graph = alternateGraph(parsed.otFont)
+  const examples: string[] = []
+  let count = 0
+
+  for (const [index, edges] of graph) {
+    if (index === exclude) continue
+    let forward = false
+    for (const [, edge] of edges) {
+      if (edge.forward) {
+        forward = true
+        break
+      }
+    }
+    if (!forward) continue
+    count += 1
+    if (examples.length < 6) {
+      const unicode = parsed.glyphs[index]?.unicode
+      // Named by the character where there is one, since `g` reads better
+      // than `uni0067` to anyone deciding whether to look.
+      if (unicode !== null && unicode !== undefined) {
+        examples.push(String.fromCodePoint(unicode))
+      }
+    }
+  }
+
+  return { count, examples }
 }
